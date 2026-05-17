@@ -3,6 +3,8 @@
 #define M_HEIGHT 16    // высота матрицы
 #define NUM_LEDS (M_WIDTH * M_HEIGHT) // для удобства запомним и количство ледов
 
+#define COLOR_DEBTH 3
+
 #include <microLED.h>
 #include <FastLEDsupport.h>    // нужна для шума
 
@@ -29,14 +31,70 @@ const uint8_t image[]={
 };
 
 // инициализация у матрицы такая же, как у ленты, но добавляются параметры в (скобках)
-microLED<NUM_LEDS, M_PIN, MLED_NO_CLOCK, LED_WS2812, ORDER_GRB, CLI_AVER> matrix(M_WIDTH, M_HEIGHT, ZIGZAG, LEFT_TOP, DIR_DOWN);
+microLED<NUM_LEDS, M_PIN, MLED_NO_CLOCK, LED_WS2812, ORDER_GRB, CLI_AVER, SAVE_MILLIS> matrix(M_WIDTH, M_HEIGHT, ZIGZAG, RIGHT_TOP, DIR_DOWN);
+// RIGHT_TOP, DIR_DOWN);
+//LEFT_TOP, DIR_RIGHT);
 // тип матрицы: ZIGZAG - зигзаг, PARALLEL - параллельная
 // угол подключения: LEFT_BOTTOM - левый нижний, LEFT_TOP - левый верхний, RIGHT_TOP - правый верхний, RIGHT_BOTTOM - правый нижний
 // направление ленты из угла подключения: DIR_RIGHT - вправо, DIR_UP - вверх, DIR_LEFT - влево, DIR_DOWN - вниз
 // шпаргалка по настройке матрицы в папке docs в библиотеке
 
-int8_t brightness = 50;
+int8_t brightness = 70; //min 50, max 150
 
+
+void setup() {
+  // matrix.setBrightness(brightness);
+  matrix.clear();
+
+  // matrix.set(1,3,mRGB(0,255,255));
+
+  // drawImage(0,0,M_WIDTH,M_HEIGHT,image);
+  // drawDigit(1,2,mRGB(0,255,255),2);
+  // matrix.show();
+  // delay(150000);
+  // matrix.clear();
+}
+
+int effect = 0;        // текущий эффект (0, 1, 2, 3, 4)
+unsigned long lastChange = 0;  // время последней смены эффекта
+const int EFFECT_COUNT = 8;     // количество эффектов
+
+void loop() {
+  /*unsigned long now = millis();
+  
+  // Меняем эффект каждые 4 секунды
+  if (now - lastChange >= 4000) {
+    effect = (effect + 1) % EFFECT_COUNT;  // переключаем на следующий эффект
+    lastChange = now;                       // обновляем время последней смены
+  }
+  
+  // Выбираем эффект в зависимости от переменной effect
+  switch(effect) {
+  case 0: rainbow2D(); break;
+  case 1: fire2D(); break;
+  case 2: balls(); break;
+  case 3: confetti(); break;
+  case 4: rainbow(); break;
+  case 5: flowingGradient(); break;
+  case 6: rainbowDiagonalWave(); break;
+  case 7: rainbowCrossDiagonal(); break;
+  case 8: diagonalGradient4(); break;
+  case 9: rainbowDiagonalWave(); break;
+  default: rainbow2D(); break;
+}*/
+
+  // matrix.clear();
+  drawImage(0,0,M_WIDTH,M_HEIGHT,image);
+  drawTestTime();
+  matrix.show();
+  delay(30);
+}
+
+int testTime = 1000;
+void drawTestTime(){
+  drawTime(testTime/100,testTime%60,mRGB(0,255,0),mRGB(0,255,255));
+  testTime=(testTime+1)%2400;
+}
 
 //animation vars
 bool is_generated_animation=false;
@@ -45,6 +103,38 @@ int animation_delay_ms;
 int32_t current_frame=0;
 int32_t frames_count=0;
 int8_t* animation_frames=nullptr;
+
+const int16_t* digitCodes[] = {
+  0b111101101101111, //0
+  0b100100100110100, //1
+  0b111001010100011, //2
+  0b011100010100011, //3
+  0b100100111101101, //4
+  0b111100111001111, //5
+  0b111101111001111, //6
+  0b001001010100111, //7
+  0b111101111101111, //8
+  0b111100111101111  //9
+};
+void drawDigit(int x, int y, mData color, int8_t digit){
+  int16_t data = digitCodes[digit];
+  int8_t bit_shift = 0;
+  for (int8_t i=0; i<5; i++){
+    for (int8_t j=0; j<3; j++){
+      if (data>>bit_shift&1)matrix.set(x+j,y+i,color);
+      bit_shift++;
+    }
+  }
+}
+
+void drawTime(int8_t hours, int8_t minutes, mData digitColor, mData semicolonColor){
+  if (hours/10) drawDigit(0,5,digitColor,hours/10);
+  drawDigit(4,5,digitColor,hours%10);
+  drawDigit(8,5,digitColor,minutes/10);
+  drawDigit(12,5,digitColor,minutes%10);
+  matrix.set(7,6,semicolonColor);
+  matrix.set(7,8,semicolonColor);
+}
 
 void drawImage(int x, int y, int width, int height, int8_t* image){
   for (int i=0; i<height; i++){
@@ -85,49 +175,6 @@ void setGeneratedAnimation(FuncPtr func){
 
 int8_t* get_array_from_flash(){
   //todo
-}
-
-void setup() {
-  matrix.setBrightness(brightness);
-  matrix.fill(mBlack);
-  
-
-  drawImage(0,0,M_WIDTH,M_HEIGHT,image);
-  matrix.show();
-  // delay(3000);
-  // matrix.clear();
-}
-
-int effect = 0;        // текущий эффект (0, 1, 2, 3, 4)
-unsigned long lastChange = 0;  // время последней смены эффекта
-const int EFFECT_COUNT = 8;     // количество эффектов
-
-void loop() {
-  unsigned long now = millis();
-  
-  // Меняем эффект каждые 4 секунды
-  if (now - lastChange >= 4000) {
-    effect = (effect + 1) % EFFECT_COUNT;  // переключаем на следующий эффект
-    lastChange = now;                       // обновляем время последней смены
-  }
-  
-  // Выбираем эффект в зависимости от переменной effect
-  switch(effect) {
-  case 0: rainbow2D(); break;
-  case 1: fire2D(); break;
-  case 2: balls(); break;
-  case 3: confetti(); break;
-  case 4: rainbow(); break;
-  case 5: flowingGradient(); break;
-  case 6: rainbowDiagonalWave(); break;
-  case 7: rainbowCrossDiagonal(); break;
-  case 8: diagonalGradient4(); break;
-  case 9: rainbowDiagonalWave(); break;
-  default: rainbow2D(); break;
-}
-  
-  matrix.show();
-  delay(30);
 }
 
 // =========== РАДУГА (правильная) ===========

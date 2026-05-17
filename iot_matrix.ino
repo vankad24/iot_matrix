@@ -13,21 +13,61 @@ microLED<NUM_LEDS, M_PIN, MLED_NO_CLOCK, LED_WS2812, ORDER_GRB, CLI_AVER> matrix
 // направление ленты из угла подключения: DIR_RIGHT - вправо, DIR_UP - вверх, DIR_LEFT - влево, DIR_DOWN - вниз
 // шпаргалка по настройке матрицы в папке docs в библиотеке
 
+int8_t brightness = 50;
+
+
+//animation vars
+bool is_generated_animation=false;
+void*() animationFunc;
+int animation_delay_ms;
+int32_t current_frame=0;
+int32_t frames_count=0;
+int8_t* animation_frames;
+
+void drawImage(int x, int y, int width, int height, int8_t* image){
+  for (int i=0; i<height; i++){
+    for (int j=0; j<width; j++){
+      int index = (i*width+j)*3;
+      matrix.set(x+j,y+i,mRGB(image[index],image[index+1],image[index+2]));
+    }
+  }
+}
+
+void drawAnimationFrame(int x, int y, int width, int height, int frame_num, int8_t* frames){
+  drawImage(x,y,width,height,frames+width*height*3*frame_num);
+}
+
+void playAnimation(){
+  if (is_generated_animation){
+    current_frame+=1;
+    animationFunc();
+  }else{
+    drawAnimationFrame(0,0,M_WIDTH,M_HEIGHT,current_frame,animation_frames);
+    current_frame=(current_frame+1)%frames_count;
+  }
+}
+
+void setImageAnimation(int _frames_count, int8_t* frames){
+  is_generated_animation=false;
+  current_frame = 0;
+  frames_count = _frames_count;
+  animation_frames = frames;
+  //todo save to progmem
+}
+
+void setGeneratedAnimation(void*() func){
+  is_generated_animation = true;
+  current_frame = 0;
+  animationFunc = func;
+}
+
+int8_t* get_array_from_flash(){
+  //todo
+}
+
 void setup() {
-  matrix.setBrightness(50);  // яркость (0-255)
-
-  // Проверка ориентации матрицы
-  // Система координат - декартовая первая четверть (левый нижний угол - 0)
-  // Левый нижний угол - жёлтый
-  // Левый верхний - пурпурный
-  // Правый нижний - голубой
-
-  // для установки пикселя используем set(x, y, цвет)
-  // всё остальное - так же как у ленты!!!
-
+  matrix.setBrightness(brightness);
   // matrix.set(0, 0, mYellow);
-  // matrix.set(0, 7, mPurple);
-  // matrix.set(7, 0, mTeal);
   // matrix.show();
   // delay(3000);
   matrix.clear();

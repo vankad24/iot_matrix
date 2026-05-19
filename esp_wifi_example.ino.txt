@@ -1,0 +1,254 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <ArduinoJson.h> // by Benoit Blanchon
+
+
+//wifi access point
+
+// Access Point mode
+String AP_NAME = "сurly_boy_wifi_";
+String AP_PASSWORD = "24242424";
+
+// Client mode
+// Ensure AP is 2.4 GHz, not 5 GHz
+char CLIENT_SSID[] = "NoHornyWifi"; //name of the WiFi to connect to
+char CLIENT_PASS[] = "24242424";
+int SERVER_PORT = 80;
+
+// Sketch -> Include Library -> Manage libraries
+// ESP8266WiFi
+// PubSubClient by Nich O'Leary
+// WifiEsp by bportaluri
+// Wifi by arduino
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WiFiMulti.h>
+
+ESP8266WiFiMulti wifiMulti;
+
+
+String ip = "IP not set";
+
+// Выцепить последние два байта из MAC адреса ESP
+String id() {
+  int mac_len = WL_MAC_ADDR_LENGTH;
+  uint8_t mac[mac_len];
+
+  WiFi.softAPmacAddress(mac);
+
+  String mac_id = String(mac[mac_len - 2], HEX) +
+          String(mac[mac_len - 1], HEX);
+
+  return mac_id;
+}
+
+// Запуск точки доступа (access point)
+bool start_ap_mode() {
+  IPAddress ap_IP(192, 168, 1, 1);
+  IPAddress subnet(255, 255, 255, 0);
+
+  String network_name = AP_NAME + id();
+  // String network_name = AP_NAME;
+
+  WiFi.disconnect();
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(ap_IP, ap_IP, subnet); // IP, Gateway, Subnet
+  WiFi.softAP(network_name.c_str(), AP_PASSWORD.c_str());
+
+  Serial.print("WiFi started in AP mode: ");
+  Serial.print(network_name);
+  Serial.print("\n");
+
+  return true;
+}
+
+// Подключение к wifi
+bool start_client_mode(){
+  IPAddress static_IP(192, 168, 1, 240);    // Желаемый IP адрес
+  IPAddress gateway(192, 168, 1, 1);         // Адрес шлюза (ваш роутер)
+  IPAddress subnet(255, 255, 255, 0);        // Маска подсети
+  IPAddress dns(192, 168, 1, 1);             // DNS сервер (обычно как шлюз)
+
+
+  wifiMulti.addAP(CLIENT_SSID, CLIENT_PASS);
+
+  // WiFi.config(static_IP, gateway, subnet, dns); //IP, Gateway, Subnet, DNS
+  Serial.println("Starting client mode");
+  while(wifiMulti.run() != WL_CONNECTED){
+    delay(10);
+  }
+  Serial.println("Client mode started");
+  return true;
+}
+
+void init_wifi(bool AP_mode){
+  if (AP_mode){
+    start_ap_mode();
+    ip = WiFi.softAPIP().toString();
+  }else{
+    start_client_mode();
+    ip = WiFi.localIP().toString();
+  }
+  Serial.print("IP adress:");
+  Serial.println(ip);
+}
+
+
+
+
+//wifi  server
+#include <ESP8266WebServer.h>
+
+static ESP8266WebServer server(80);
+
+static void handle_root() {
+  char* page_code = "<h1>"
+                    "hello!"
+                    "</h1>";
+
+  server.send(200, "text/html", page_code);
+}
+
+static void handle_led() {
+  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+
+  server.sendHeader("Location", "/");
+  server.send(303);
+}
+
+static void handle_not_found() {
+  server.send(404, "text/html", "404 check url");
+}
+
+void server_init() {
+  server.on("/", HTTP_GET, handle_root);
+  server.on("/led", HTTP_POST, handle_led);
+  server.onNotFound(handle_not_found);
+  server.begin();
+
+  Serial.print("Server is up on port 80\n");
+}
+
+void server_handle() {
+  server.handleClient();
+}
+
+
+enum class Method
+{
+    GET,
+    POST,
+    PUT,
+    DELETE
+};
+
+String fetch(const String& url,
+             Method method = Method::GET,
+             const String& body = "",
+             const String& contentType = "text/plain")
+{
+    HTTPClient http;
+
+    std::unique_ptr<WiFiClient> plainClient;
+    std::unique_ptr<BearSSL::WiFiClientSecure> secureClient;
+
+    WiFiClient* clientPtr = nullptr;
+
+    if (url.startsWith("https://"))
+    {
+        secureClient.reset(new BearSSL::WiFiClientSecure);
+        secureClient->setInsecure(); // для продакшена лучше сертификаты
+
+        clientPtr = secureClient.get();
+
+        if (!http.begin(*secureClient, url))
+            return "";
+    }
+    else
+    {
+        plainClient.reset(new WiFiClient);
+        clientPtr = plainClient.get();
+
+        if (!http.begin(*plainClient, url))
+            return "";
+    }
+
+    int code = -1;
+
+    switch (method)
+    {
+        case Method::GET:
+            code = http.GET();
+            break;
+
+        case Method::POST:
+            code = http.POST(body);
+            break;
+
+        case Method::PUT:
+            http.addHeader("Content-Type", contentType);
+            code = http.sendRequest("PUT", body);
+            break;
+
+        case Method::DELETE:
+            code = http.sendRequest("DELETE", body);
+            break;
+    }
+
+    String response;
+
+    if (code > 0)//httpCode
+    {
+        response = http.getString();
+    }
+
+    http.end();
+
+
+    Serial.print("url: ");
+    Serial.print(url);
+    Serial.print(" http code: ");
+    Serial.print(code);
+    Serial.print(" response: ");
+    Serial.println(response);
+
+
+    return response;
+}
+
+
+
+
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, 0);
+
+  Serial.begin(9600);
+  Serial.print("\f\rSystem startup\n");
+
+  // start_ap_mode();
+  init_wifi(false);
+  server_init();
+  fetch("http://ipinfo.io/json");
+  // fetch("https://time.now/developer/api/ip");
+  // https://www.timeapi.io/api/v1/time/current/unix
+  String response = fetch("https://nordapi.ee/api/v1/time/current?timezone=Asia/Irkutsk");
+  JsonDocument doc;
+  deserializeJson(doc, response);
+  uint8_t hour = doc["data"]["hour"];
+  uint8_t minute = doc["data"]["minute"];
+  Serial.print("Time: ");
+  Serial.print(hour);
+  Serial.print(":");
+  Serial.print(minute);
+  Serial.print(" sum");
+  Serial.println(minute+hour);
+
+}
+
+void loop() {
+  server_handle();
+  delay(20);
+}

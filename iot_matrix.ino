@@ -444,3 +444,40 @@ void diagonalGradient4() {
     }
   }
 }
+
+
+enum class Mode : uint8_t
+{
+    Clock,
+    Image,
+    Animation,
+    Weather
+};
+
+// Глобальная переменная текущего режима
+Mode currentMode = Mode::Clock;
+
+void processMode()
+{
+    switch (currentMode)
+    {
+        case Mode::Clock:
+            // processClock();
+            break;
+
+        case Mode::Image:
+            // processImage();
+            break;
+
+        case Mode::Animation:
+            // processAnimation();
+            break;
+
+        case Mode::Weather:
+            // processWeather();
+            break;
+
+        default:
+            break;
+    }
+}

@@ -1,108 +1,105 @@
-#define M_PIN 6       // пин матрицы
-#define M_WIDTH 16    // ширина матрицы
-#define M_HEIGHT 16    // высота матрицы
-#define NUM_LEDS (M_WIDTH * M_HEIGHT) // для удобства запомним и количство ледов
+// Sketch -> Include Library -> Manage libraries
+// ESP8266WiFi
+// PubSubClient by Nich O'Leary
+// WifiEsp by bportaluri
+// Wifi by arduino
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <ArduinoJson.h> // by Benoit Blanchon
+#include <ESP8266WebServer.h>
+#include <LittleFS.h>
+#include <Arduino.h>
 
-#define COLOR_DEBTH 3
+#define M_PIN 6
+#define M_WIDTH 16
+#define M_HEIGHT 16
+#define NUM_LEDS (M_WIDTH * M_HEIGHT)
 
-#include <microLED.h>
-#include <FastLEDsupport.h>    // нужна для шума
-
-typedef void (*FuncPtr)();
-
-//grass_block_side.png img.shape=(16, 16, 3)
-const uint8_t image[]={
-  0x74, 0xb4, 0x4a, 0x76, 0xb6, 0x4c, 0x73, 0xb3, 0x49, 0x66, 0xa6, 0x3c, 0x66, 0xa6, 0x3c, 0x6f, 0xaf, 0x45, 0x5f, 0x9f, 0x35, 0x6c, 0xac, 0x42, 0x7e, 0xbe, 0x54, 0x76, 0xb6, 0x4c, 0x6a, 0xaa, 0x40, 0x67, 0xa7, 0x3d, 0x69, 0xa9, 0x3f, 0x61, 0xa1, 0x37, 0x50, 0x90, 0x26, 0x6d, 0xad, 0x43,
-  0x75, 0xb5, 0x4b, 0x6c, 0xac, 0x42, 0x8a, 0xb9, 0x5a, 0x81, 0xb0, 0x51, 0x83, 0xb2, 0x53, 0x59, 0x3d, 0x29, 0x68, 0xa8, 0x3e, 0x62, 0xa2, 0x38, 0x5f, 0x9f, 0x35, 0x93, 0xc2, 0x63, 0x90, 0xbf, 0x60, 0x73, 0xb3, 0x49, 0x61, 0xa1, 0x37, 0x6c, 0xac, 0x42, 0x67, 0xa7, 0x3d, 0x6b, 0xab, 0x41,
-  0x8d, 0xbc, 0x5d, 0x59, 0x3d, 0x29, 0x9c, 0xcb, 0x6c, 0x64, 0xa4, 0x3a, 0x69, 0xa9, 0x3f, 0x59, 0x3d, 0x29, 0x70, 0xb0, 0x46, 0x59, 0x3d, 0x29, 0x74, 0xb4, 0x4a, 0x7f, 0xbf, 0x55, 0x92, 0xc1, 0x62, 0x97, 0xc6, 0x67, 0x59, 0x3d, 0x29, 0x57, 0x97, 0x2d, 0x60, 0xa0, 0x36, 0x59, 0x3d, 0x29,
-  0x59, 0x3d, 0x29, 0x6c, 0x6c, 0x6c, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x71, 0xb1, 0x47, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x5f, 0x9f, 0x35, 0x59, 0x3d, 0x29, 0x6d, 0xad, 0x43, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a,
-  0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0xb9, 0x85, 0x5c, 0x59, 0x3d, 0x29, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x6c, 0x6c, 0x6c, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a,
-  0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c,
-  0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x87, 0x87, 0x87, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a,
-  0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x59, 0x3d, 0x29, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a,
-  0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a,
-  0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a,
-  0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0x96, 0x6c, 0x4a, 0x59, 0x3d, 0x29, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x59, 0x3d, 0x29, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x87, 0x87, 0x87, 0x79, 0x55, 0x3a,
-  0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x6c, 0x6c, 0x6c, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29,
-  0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c,
-  0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x74, 0x58, 0x44, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0xb9, 0x85, 0x5c, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a,
-  0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29, 0xb9, 0x85, 0x5c, 0xb9, 0x85, 0x5c, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a,
-  0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0xb9, 0x85, 0x5c, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x87, 0x87, 0x87, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x79, 0x55, 0x3a, 0x96, 0x6c, 0x4a, 0x96, 0x6c, 0x4a, 0x79, 0x55, 0x3a, 0x59, 0x3d, 0x29
-};
-
-// инициализация у матрицы такая же, как у ленты, но добавляются параметры в (скобках)
 microLED<NUM_LEDS, M_PIN, MLED_NO_CLOCK, LED_WS2812, ORDER_GRB, CLI_AVER, SAVE_MILLIS> matrix(M_WIDTH, M_HEIGHT, ZIGZAG, RIGHT_TOP, DIR_DOWN);
 // RIGHT_TOP, DIR_DOWN);
 //LEFT_TOP, DIR_RIGHT);
-// тип матрицы: ZIGZAG - зигзаг, PARALLEL - параллельная
-// угол подключения: LEFT_BOTTOM - левый нижний, LEFT_TOP - левый верхний, RIGHT_TOP - правый верхний, RIGHT_BOTTOM - правый нижний
-// направление ленты из угла подключения: DIR_RIGHT - вправо, DIR_UP - вверх, DIR_LEFT - влево, DIR_DOWN - вниз
-// шпаргалка по настройке матрицы в папке docs в библиотеке
 
-int8_t brightness = 70; //min 50, max 150
+ESP8266WebServer server(80);
+
+// Access Point mode
+String AP_NAME = "iot_matrix_";
+String AP_PASSWORD = "24242424";
+
+// Client mode
+// Ensure AP is 2.4 GHz, not 5 GHz
+char CLIENT_SSID[] = "NoHornyWifi"; //name of the WiFi to connect to
+char CLIENT_PASS[] = "24242424";
+String ip = "0.0.0.0";
 
 
-void setup() {
-  // matrix.setBrightness(brightness);
-  matrix.clear();
+ESP8266WiFiMulti wifiMulti;
 
-  // matrix.set(1,3,mRGB(0,255,255));
+struct Settings {
+  char wifi[32] = "HomeWiFi";
+  char pass[32] = "12345678";
+  int brightness = 80;
+  int min_brightness = 10;
+  int max_brightness = 100;
+  int sleep_delay = 10;
+  int animation_id = 0;
+} settings;
 
-  // drawImage(0,0,M_WIDTH,M_HEIGHT,image);
-  // drawDigit(1,2,mRGB(0,255,255),2);
-  // matrix.show();
-  // delay(150000);
-  // matrix.clear();
+//modes
+uint8_t current_mode = 0;
+using ModeHandler = void (*)();
+enum class Mode : uint8_t { Clock, Image, Animation, Weather };
+struct ModeInfo {
+    Mode mode;
+    const char* name;
+    ModeHandler handler_func;
+};
+
+static const ModeInfo modes[] = {
+    { Mode::Clock,     "Clock",     handleClock },
+    { Mode::Image,     "Image",     handleImage },
+    { Mode::Animation, "Animation", handleAnimation },
+    { Mode::Weather,   "Weather",   handleWeather }
+};
+constexpr uint8_t MODE_COUNT = sizeof(modes) / sizeof(modes[0]);
+
+uint8_t modeToInt(Mode mode) {
+    return static_cast<uint8_t>(mode);
 }
-
-int effect = 0;        // текущий эффект (0, 1, 2, 3, 4)
-unsigned long lastChange = 0;  // время последней смены эффекта
-const int EFFECT_COUNT = 8;     // количество эффектов
-
-void loop() {
-  /*unsigned long now = millis();
-  
-  // Меняем эффект каждые 4 секунды
-  if (now - lastChange >= 4000) {
-    effect = (effect + 1) % EFFECT_COUNT;  // переключаем на следующий эффект
-    lastChange = now;                       // обновляем время последней смены
-  }
-  
-  // Выбираем эффект в зависимости от переменной effect
-  switch(effect) {
-  case 0: rainbow2D(); break;
-  case 1: fire2D(); break;
-  case 2: balls(); break;
-  case 3: confetti(); break;
-  case 4: rainbow(); break;
-  case 5: flowingGradient(); break;
-  case 6: rainbowDiagonalWave(); break;
-  case 7: rainbowCrossDiagonal(); break;
-  case 8: diagonalGradient4(); break;
-  case 9: rainbowDiagonalWave(); break;
-  default: rainbow2D(); break;
-}*/
-
-  // matrix.clear();
-  drawImage(0,0,M_WIDTH,M_HEIGHT,image);
-  drawTestTime();
-  matrix.show();
-  delay(30);
+Mode modeFromInt(uint8_t id) {
+    return modes[id%MODE_COUNT].mode;
 }
-
-int testTime = 1000;
-void drawTestTime(){
-  drawTime(testTime/100,testTime%60,mRGB(0,255,0),mRGB(0,255,255));
-  testTime=(testTime+1)%2400;
+const char* modeToString(Mode mode) {
+    return modes[modeToInt(mode)].name;
+}
+void processMode(){
+  modes[id%MODE_COUNT].handler_func();
+}
+void setMode(Mode mode){
+  current_mode = modeToInt(mode);
+}
+void nextMode(){
+  current_mode = (current_mode+1)%MODE_COUNT;
+}
+void prevMode(){
+  current_mode = (current_mode-1)%MODE_COUNT;
 }
 
 //animation vars
+typedef void (*FuncPtr)();
 bool is_generated_animation=false;
-FuncPtr animationFunc=nullptr;
 int animation_delay_ms;
 int32_t current_frame=0;
 int32_t frames_count=0;
 int8_t* animation_frames=nullptr;
+int8_t* image_frame=nullptr;
+FuncPtr animationFunc=nullptr;
+
+const FuncPtr animation_id_to_func[] = {
+  //todo
+}
 
 const int16_t* digitCodes[] = {
   0b111101101101111, //0
@@ -116,6 +113,28 @@ const int16_t* digitCodes[] = {
   0b111101111101111, //8
   0b111100111101111  //9
 };
+
+
+
+// ----------- functions -----------
+
+
+void handleClock(){
+  drawTime(millis()/40000%24, millis()/1000%60,mRGB(0,255,0),mRGB(0,255,255));
+}
+void handleImage(){
+  matrix.fill(mRGB(0,255,0));
+
+}
+void handleAnimation(){
+    matrix.fill(mRGB(255,0,0));
+
+}
+void handleWeather(){
+    matrix.fill(mRGB(0,0,255));
+}
+
+// draw
 void drawDigit(int x, int y, mData color, int8_t digit){
   int16_t data = digitCodes[digit];
   int8_t bit_shift = 0;
@@ -128,13 +147,15 @@ void drawDigit(int x, int y, mData color, int8_t digit){
 }
 
 void drawTime(int8_t hours, int8_t minutes, mData digitColor, mData semicolonColor){
-  if (hours/10) drawDigit(0,5,digitColor,hours/10);
+  // if (hours/10) 
+    drawDigit(0,5,digitColor,hours/10);
   drawDigit(4,5,digitColor,hours%10);
   drawDigit(8,5,digitColor,minutes/10);
   drawDigit(12,5,digitColor,minutes%10);
   matrix.set(7,6,semicolonColor);
   matrix.set(7,8,semicolonColor);
 }
+
 
 void drawImage(int x, int y, int width, int height, int8_t* image){
   for (int i=0; i<height; i++){
@@ -159,325 +180,535 @@ void playAnimation(){
   }
 }
 
-void setImageAnimation(int _frames_count, int8_t* frames){
+void setFramedAnimation(int8_t* frames, int _frames_count){
+  if (animation_frames!=nullptr){
+    free(animation_frames);
+    animation_frames==nullptr;
+  }
   is_generated_animation=false;
   current_frame = 0;
   frames_count = _frames_count;
   animation_frames = frames;
-  //todo save to progmem
+  settings.animation_id = -1;
 }
 
-void setGeneratedAnimation(FuncPtr func){
+
+void setGeneratedAnimation(int8_t animation_id){
+  if (animation_frames!=nullptr){
+    free(animation_frames);
+    animation_frames==nullptr;
+  }
   is_generated_animation = true;
   current_frame = 0;
-  animationFunc = func;
+  settings.animation_id = animation_id;
+  animationFunc = animation_id_to_func[animation_id];
 }
 
-int8_t* get_array_from_flash(){
+void setImage(int8_t* frame){
+  if (image_frame!=nullptr){
+    free(image_frame);
+    image_frame = nullptr;
+  }
+  image_frame = frame;
+}
+
+//settings
+bool saveSettings() {
+    StaticJsonDocument<256> doc;
+    doc["wifi"] = settings.wifi;
+    doc["pass"] = settings.pass;
+    doc["brightness"] = settings.brightness;
+    doc["min_brightness"] = settings.min_brightness;
+    doc["max_brightness"] = settings.max_brightness;
+    doc["sleep_delay"] = settings.sleep_delay;
+    doc["animation_id"] = settings.animation_id;
+
+    File file = LittleFS.open("/config.json", "w");
+    if (!file) {
+        Serial.println("Failed to open file for writing");
+        return false;
+    }
+    serializeJsonPretty(doc, file);
+    file.close();
+    Serial.println("Settings saved");
+    return true;
+}
+
+bool loadSettings() {
+    if (!LittleFS.exists("/config.json")) {
+        Serial.println("Config file not found");
+        return false;
+    }
+    File file = LittleFS.open("/config.json", "r");
+    if (!file) {
+        Serial.println("Failed to open config file");
+        return false;
+    }
+    StaticJsonDocument<256> doc;
+    DeserializationError err =
+        deserializeJson(doc, file);
+    file.close();
+    if (err) {
+        Serial.print("JSON parse error: ");
+        Serial.println(err.c_str());
+        return false;
+    }
+
+    strlcpy(settings.wifi, doc["wifi"] | settings.wifi, sizeof(settings.wifi));
+    strlcpy(settings.pass, doc["pass"] | settings.pass, sizeof(settings.pass));
+    settings.brightness = doc["brightness"] | settings.brightness;
+    settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
+    settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
+    settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
+    settings.animation_id = doc["animation_id"] | settings.animation_id;
+    loadAnimation(settings.animation_id);
+    loadImage();
+
+    Serial.println("Settings loaded");
+    return true;
+}
+
+void loadAnimation(int8_t animation_id){
+  if (animation_id>=0){
+    setGeneratedAnimation(animation_id);
+  }else{
+    if (animation_frames!=nullptr){
+      free(animation_frames);
+      animation_frames = nullptr;
+    }
+    int32_t num=0;
+    int8_t* frames=nullptr;
+    readBytes("/anim", frames, num);
+    setFramedAnimation(frames, num);
+  }
+}
+
+void loadImage(){
+    if (image_frame!=nullptr){
+      free(image_frame);
+      image_frame = nullptr;
+    }
+    int8_t* frame=nullptr;
+    readBytes("/image", frame);
+    setImage(frame);
+}
+
+// acess point / wifi
+
+// Выцепить последние два байта из MAC адреса ESP
+String mac_adress_id() {
+  int mac_len = WL_MAC_ADDR_LENGTH;
+  uint8_t mac[mac_len];
+
+  WiFi.softAPmacAddress(mac);
+
+  String mac_id = String(mac[mac_len - 2], HEX) +
+          String(mac[mac_len - 1], HEX);
+
+  return mac_id;
+}
+
+// Запуск точки доступа (access point)
+void start_ap_mode() {
+  IPAddress ap_IP(192, 168, 1, 1);
+  IPAddress subnet(255, 255, 255, 0);
+
+  String network_name = AP_NAME + mac_adress_id();
+  // String network_name = AP_NAME;
+
+  WiFi.disconnect();
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(ap_IP, ap_IP, subnet); // IP, Gateway, Subnet
+  WiFi.softAP(network_name.c_str(), AP_PASSWORD.c_str());
+
+  ip = WiFi.softAPIP().toString();
+
+  Serial.print("WiFi started in AP mode: ");
+  Serial.print(network_name);
+  Serial.print("\n");
+
+  
+}
+
+// Подключение к wifi
+void start_client_mode(){
+  IPAddress static_IP(192, 168, 1, 240);    // Желаемый IP адрес
+  IPAddress gateway(192, 168, 1, 1);         // Адрес шлюза (ваш роутер)
+  IPAddress subnet(255, 255, 255, 0);        // Маска подсети
+  IPAddress dns(192, 168, 1, 1);             // DNS сервер (обычно как шлюз)
+
+
+  wifiMulti.addAP(CLIENT_SSID, CLIENT_PASS);
+
+  // WiFi.config(static_IP, gateway, subnet, dns); //IP, Gateway, Subnet, DNS
+  Serial.println("Starting client mode");
+  while(wifiMulti.run() != WL_CONNECTED){
+    delay(10);
+  }
+  Serial.println("Client mode started");
+  ip = WiFi.localIP().toString();
+}
+
+//internet access
+
+enum class Method
+{
+    GET,
+    POST,
+    PUT,
+    DELETE
+};
+
+
+String fetch(const String& url,
+             Method method = Method::GET,
+             const String& body = "",
+             const String& contentType = "text/plain")
+{
+    HTTPClient http;
+
+    std::unique_ptr<WiFiClient> plainClient;
+    std::unique_ptr<BearSSL::WiFiClientSecure> secureClient;
+
+    WiFiClient* clientPtr = nullptr;
+
+    if (url.startsWith("https://"))
+    {
+        secureClient.reset(new BearSSL::WiFiClientSecure);
+        secureClient->setInsecure(); // для продакшена лучше сертификаты
+
+        clientPtr = secureClient.get();
+
+        if (!http.begin(*secureClient, url))
+            return "";
+    }
+    else
+    {
+        plainClient.reset(new WiFiClient);
+        clientPtr = plainClient.get();
+
+        if (!http.begin(*plainClient, url))
+            return "";
+    }
+    if (!body.isEmpty()){
+        http.addHeader("Content-Type", contentType);
+    }
+
+    int code = -1;
+
+    switch (method)
+    {
+        case Method::GET:
+            code = http.GET();
+            break;
+
+        case Method::POST:
+            code = http.POST(body);
+            break;
+
+        case Method::PUT:
+            code = http.sendRequest("PUT", body);
+            break;
+
+        case Method::DELETE:
+            code = http.sendRequest("DELETE", body);
+            break;
+    }
+
+    String response;
+
+    if (code > 0)//httpCode
+    {
+        response = http.getString();
+    }
+
+    http.end();
+
+
+    Serial.print("fetched url: ");
+    Serial.print(url);
+    Serial.print(" http code: ");
+    Serial.print(code);
+    Serial.print(" response: ");
+    Serial.println(response);
+
+
+    return response;
+}
+
+//little file system
+
+// Сохранение массива байт в файл
+bool saveBytes(const char* filename, const uint8_t* data, size_t len)
+{
+    File file = LittleFS.open(filename, "w");
+    if (!file)
+    {
+        Serial.println("Open file for write failed");
+        return false;
+    }
+
+    size_t written = file.write(data, len);
+    file.close();
+
+    return (written == len);
+}
+
+// Чтение массива байт из файла
+// data -> будет выделена память через malloc()
+// len  -> размер прочитанных данных
+bool readBytes(const char* filename, uint8_t*& data, size_t& len)
+{
+    File file = LittleFS.open(filename, "r");
+    if (!file)
+    {
+        Serial.println("Open file for read failed");
+        return false;
+    }
+
+    len = file.size();
+
+    if (len == 0)
+    {
+        file.close();
+        return false;
+    }
+
+    data = (uint8_t*)malloc(len);
+
+    if (!data)
+    {
+        Serial.println("Memory allocation failed");
+        file.close();
+        return false;
+    }
+
+    size_t readed = file.read(data, len);
+
+    file.close();
+
+    if (readed != len)
+    {
+        free(data);
+        data = nullptr;
+        len = 0;
+        return false;
+    }
+
+    return true;
+}
+
+
+// Сохранение структуры
+template<typename T>
+bool saveStruct(const char* filename, const T& data)
+{
+    File file = LittleFS.open(filename, "w");
+
+    if (!file)
+    {
+        Serial.println("Open file for write failed");
+        return false;
+    }
+
+    size_t written = file.write(
+        reinterpret_cast<const uint8_t*>(&data),
+        sizeof(T)
+    );
+
+    file.close();
+
+    return (written == sizeof(T));
+}
+
+// Чтение структуры
+template<typename T>
+bool readStruct(const char* filename, T& data)
+{
+    File file = LittleFS.open(filename, "r");
+
+    if (!file)
+    {
+        Serial.println("Open file for read failed");
+        return false;
+    }
+
+    // Проверка размера файла
+    if (file.size() != sizeof(T))
+    {
+        Serial.println("Invalid struct size");
+        file.close();
+        return false;
+    }
+
+    size_t readed = file.read(
+        reinterpret_cast<uint8_t*>(&data),
+        sizeof(T)
+    );
+
+    file.close();
+
+    return (readed == sizeof(T));
+}
+
+
+//endpoints
+
+void endpoint_status() {
+  StaticJsonDocument<256> doc;
+  const char* mode_str = "clock";
+  if (currentMode == Mode::Clock) mode_str = "clock";
+  else if (currentMode == Mode::Image) mode_str = "image";
+  else if (currentMode == Mode::Animation) mode_str = "animation";
+  else if (currentMode == Mode::Weather) mode_str = "weather";
+  doc["mode"] = mode_str;
+  doc["brightness"] = settings.brightness;
+  doc["ip"] = ip;
+  String out;
+  serializeJson(doc, out);
+  server.send(200, "application/json", out);
+}
+
+void endpoint_set_mode() {
+  StaticJsonDocument<128> doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { server.send(400, "application/json", "{}\n"); return; }
+  String mode = doc["mode"] | "clock";
+  if (mode == "clock") currentMode = Mode::Clock;
+  else if (mode == "image") currentMode = Mode::Image;
+  else if (mode == "animation") currentMode = Mode::Animation;
+  else if (mode == "weather") currentMode = Mode::Weather;
+  server.send(200, "application/json", "{}\n");
+}
+
+void endpoint_set_settings() {
+  StaticJsonDocument<128> doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { server.send(400, "application/json", "{}\n"); return; }
+  settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
+  settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
+  settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
+  saveSettings();
+  server.send(200, "application/json", "{}\n");
+}
+
+void endpoint_set_wifi() {
+  StaticJsonDocument<128> doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { server.send(400, "application/json", "{}\n"); return; }
+  strlcpy(settings.wifi, doc["ssid"] | settings.wifi, sizeof(settings.wifi));
+  strlcpy(settings.pass, doc["password"] | settings.pass, sizeof(settings.pass));
+  saveSettings();
+  server.send(200, "application/json", "{}\n");
+  ESP.restart();
+}
+
+void endpoint_set_image() {
+  StaticJsonDocument<256> doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { server.send(400, "application/json", "{}\n"); return; }
+  JsonArray arr = doc["data"].as<JsonArray>();
+  if (arr.size() != 256*3) { server.send(400, "application/json", "{}\n"); return; }
+  int8_t image[256*3];
+  for (int i=0; i<256*3; ++i) image[i] = arr[i];
+  // draw image
+  for (int y=0; y<M_HEIGHT; ++y) {
+    for (int x=0; x<M_WIDTH; ++x) {
+      int idx = (y*M_WIDTH + x)*3;
+      matrix.set(x, y, mRGB(image[idx], image[idx+1], image[idx+2]));
+    }
+  }
+  matrix.show();
+  server.send(200, "application/json", "{}\n");
+}
+
+void endpoint_set_animation() {
+  StaticJsonDocument<1024> doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { server.send(400, "application/json", "{}\n"); return; }
+  int frames = doc["frames"] | 0;
+  JsonArray arr = doc["data"].as<JsonArray>();
+  if (frames <= 0 || arr.size() != frames) { server.send(400, "application/json", "{}\n"); return; }
+  for (int f=0; f<frames; ++f) {
+    JsonArray frame = arr[f].as<JsonArray>();
+    if (frame.size() != 256*3) continue;
+    for (int y=0; y<M_HEIGHT; ++y) {
+      for (int x=0; x<M_WIDTH; ++x) {
+        int idx = (y*M_WIDTH + x)*3;
+        matrix.set(x, y, mRGB(frame[idx], frame[idx+1], frame[idx+2]));
+      }
+    }
+    matrix.show();
+    delay(100);
+  }
+  server.send(200, "application/json", "{}\n");
+}
+
+void endpoint_not_found() {
+  server.send(404, "application/json", "{}\n");
+}
+
+
+void processTime(){
+  
+}
+
+void setup_endpoints(){
+  server.on("/status", HTTP_GET, endpoint_status);
+  server.on("/settings", HTTP_POST, endpoint_set_settings);
+  server.on("/wifi", HTTP_POST, endpoint_set_wifi);
+  server.on("/mode", HTTP_POST, endpoint_set_mode);
+  server.on("/image", HTTP_POST, endpoint_set_image);
+  server.on("/animation", HTTP_POST, endpoint_set_animation);
+  server.onNotFound(endpoint_not_found);
+  server.begin();
+}
+
+void setup_arduino(){
+    Serial.begin(115200);
+    // pinMode()
+}
+
+void setup_littlefs(){
+    // mount filesystem
+    if (!LittleFS.begin()) {
+        Serial.println("LittleFS mount failed");
+        return;
+    }
+    Serial.println("LittleFS mounted");
+}
+
+
+void setup_settings(){
+    // load config
+    if (!loadSettings()) {
+        Serial.println("Loading settings failed. Used default settings");
+    }
+    Serial.println("Settings loaded");
+}
+
+void setup_matrix(){
+  matrix.clear();
+  matrix.setBrightness(settings.brightness);  
+}
+
+void setup_wifi(){
   //todo
 }
 
-// =========== РАДУГА (правильная) ===========
-void rainbow() {
-  static byte hue = 0;
-  hue += 2;  // скорость смены цветов
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Цвет зависит от диагональной позиции (i + j)
-      // и смещается во времени переменной hue
-      byte colorHue = hue + (i + j) * (255 / (M_WIDTH + M_HEIGHT - 2));
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
+void setup() {
+  setup_arduino();
+  setup_littlefs();
+  setup_settings();
+  setup_matrix();
+  setup_wifi();
+  setup_endpoints();
 }
 
-// =========== ШАРИКИ ===========
-#define BALLS_AMOUNT 5
-boolean loadingFlag = true;
-int coord[BALLS_AMOUNT][2];
-int8_t vector[BALLS_AMOUNT][2];
-mData ballColors[BALLS_AMOUNT];
-
-void balls() {
-  if (loadingFlag) {
-    loadingFlag = false;
-    for (byte j = 0; j < BALLS_AMOUNT; j++) {
-      int sign;
-      // забиваем случайными данными
-      coord[j][0] = M_WIDTH / 2 * 10;
-      random8(0, 2) ? sign = 1 : sign = -1;
-      vector[j][0] = random8(4, 15) * sign;
-      coord[j][1] = M_HEIGHT / 2 * 10;
-      random8(0, 2) ? sign = 1 : sign = -1;
-      vector[j][1] = random8(4, 15) * sign;
-      ballColors[j] = mWheel8(random8(0, 9) * 28);
-    }
-  }
-
-  matrix.clear();  // очистить
-
-  // движение шариков
-  for (byte j = 0; j < BALLS_AMOUNT; j++) {
-    for (byte i = 0; i < 2; i++) {
-      coord[j][i] += vector[j][i];
-      if (coord[j][i] < 0) {
-        coord[j][i] = 0;
-        vector[j][i] = -vector[j][i];
-      }
-    }
-    if (coord[j][0] > (M_WIDTH - 1) * 10) {
-      coord[j][0] = (M_WIDTH - 1) * 10;
-      vector[j][0] = -vector[j][0];
-    }
-    if (coord[j][1] > (M_HEIGHT - 1) * 10) {
-      coord[j][1] = (M_HEIGHT - 1) * 10;
-      vector[j][1] = -vector[j][1];
-    }
-    matrix.set(coord[j][0] / 10, coord[j][1] / 10, ballColors[j]);
-  }
-}
-
-// =========== КОНФЕТТИ ===========
-void confetti() {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    if (matrix.get(i) == 0)
-      if (random8(0, 100) == 0) matrix.set(i, mWheel8(random8()));
-    matrix.fade(i, 30);
-  }
-}
-
-// =========== ОГОНЬ ===========
-mGradient<4> myGrad;
-boolean loadingFlag2 = true;
-void fire2D() {
-  static int count = 0;
-  if (loadingFlag2) {
-    loadingFlag2 = false;
-    // заполняем палитру
-    myGrad.colors[0] = mBlack;
-    myGrad.colors[1] = mRed;
-    myGrad.colors[2] = mYellow;
-    myGrad.colors[3] = mWhite;
-  }
-  for (int i = 0; i < M_WIDTH; i++)
-    for (int j = 0; j < M_HEIGHT; j++)
-      matrix.set(i, j, myGrad.get(inoise8(i * 50, j * 50, count), 255));
-  count += 20;
-}
-
-// =========== РАДУЖНЫЕ ШТУКИ ===========
-void rainbow2D() {
-  static int count = 0;
-  static byte count2 = 0;
-  for (int i = 0; i < M_WIDTH; i++)
-    for (int j = 0; j < M_HEIGHT; j++)
-      matrix.set(i, j, mWheel8(count2 + inoise8(i * 50, j * 50, count), 255));
-  count += 20;
-  count2++;
-}
-
-// =========== РАДУГА ПО ДИАГОНАЛИ ===========
-void rainbowDiagonal() {
-  static byte hue = 0;
-  hue += 2;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Используем псевдо-треугольную волну для плавного перехода
-      int pos = (i * M_HEIGHT + j);
-      byte colorHue = hue + pos * (255 / (M_WIDTH * M_HEIGHT));
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-void rainbowSinus() {
-  static int count = 0;
-  count += 2;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Диагональная радуга с плавающим центром
-      int angle = (i * 100 / M_WIDTH) + (j * 100 / M_HEIGHT) + count;
-      byte colorHue = (angle * 255 / 200) % 255;
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-// Вариант 1: Волна по диагонали (более плавная)
-void rainbowDiagonalWave() {
-  static byte hue = 0;
-  hue += 2;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Синусоидальная волна по диагонали
-      byte colorHue = hue + (i * 180 / M_WIDTH) + (j * 180 / M_HEIGHT);
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-// Вариант 2: Две пересекающиеся диагонали
-void rainbowCrossDiagonal() {
-  static byte hue = 0;
-  hue += 4;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Эффект креста: главная и побочная диагонали
-      int mainDiag = i + j;           // главная диагональ
-      int secDiag = i + (M_HEIGHT-1 - j);  // побочная диагональ
-      
-      // Комбинируем обе диагонали
-      byte colorHue = hue + (mainDiag * secDiag * 255 / ((M_WIDTH+M_HEIGHT) * (M_WIDTH+M_HEIGHT)));
-      
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-// Вариант 3: Диагональ с мерцанием (использует inoise8 для плавности)
-void rainbowDiagonalNoise() {
-  static int count = 0;
-  static byte hue = 0;
-  hue += 2;
-  count += 10;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Диагональ + шум Перлина для органичности
-      int diag = i + j;
-      byte noiseValue = inoise8(i * 30, j * 30, count);
-      byte colorHue = hue + diag * 2 + noiseValue / 3;
-      
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-void flowingGradient() {
-  static int shift = 0;          // смещение цветовой палитры
-  static unsigned long lastTime = 0;
-  
-  // обновляем смещение каждые 30 мс (плавность перелива)
-  if (millis() - lastTime >= 30) {
-    shift = (shift + 2) % 256;   // скорость изменения цвета
-    lastTime = millis();
-  }
-  
-  // градиент на 4 опорных цвета
-  mGradient<4> grad;
-  grad.colors[0] = mWheel8((0   + shift) % 256);
-  grad.colors[1] = mWheel8((85  + shift) % 256);   // 256/3 ≈ 85
-  grad.colors[2] = mWheel8((170 + shift) % 256);
-  grad.colors[3] = mWheel8((255 + shift) % 256);
-  
-  // заливка матрицы по горизонтали (x – координата столбца)
-  for (int x = 0; x < M_WIDTH; x++) {
-    mData color = grad.get(x, M_WIDTH);   // цвет для всего столбца
-    for (int y = 0; y < M_HEIGHT; y++) {
-      matrix.set(x, y, color);
-    }
-  }
-}
-
-void diagonalGradient() {
-  static byte hue = 0;
-  hue += 2;  // скорость перелива (чем больше число, тем быстрее)
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Вычисляем позицию на диагонали (нормализованную от 0 до 255)
-      float t = (float)(i + j) / (M_WIDTH + M_HEIGHT - 2);
-      byte colorHue = hue + (byte)(t * 255);
-      
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-void diagonalGradient2() {
-  static byte hue = 0;
-  hue += 2;  // скорость смены цветов
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Диагональный градиент с нормализацией от 0 до 255
-      byte diagPos = map(i + j, 0, M_WIDTH + M_HEIGHT - 2, 0, 255);
-      byte colorHue = hue + diagPos;
-      
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-void diagonalGradient3() {
-  static byte hue = 0;
-  hue += 2;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Градиент по диагонали с коэффициентом для более плавного перехода
-      int diagPos = (i + j) * (255 / (M_WIDTH + M_HEIGHT - 2));
-      byte colorHue = hue + diagPos;
-      
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-void diagonalGradient4() {
-  static byte hue = 0;
-  hue += 2;
-  int centerX = M_WIDTH / 2;
-  int centerY = M_HEIGHT / 2;
-  
-  for (int i = 0; i < M_WIDTH; i++) {
-    for (int j = 0; j < M_HEIGHT; j++) {
-      // Расстояние от диагонали (красивое перекрестное переливание)
-      int diagDist = abs(i - j);
-      int maxDist = max(M_WIDTH, M_HEIGHT);
-      byte colorHue = hue + map(diagDist, 0, maxDist, 0, 255);
-      
-      matrix.set(i, j, mWheel8(colorHue));
-    }
-  }
-}
-
-
-enum class Mode : uint8_t
-{
-    Clock,
-    Image,
-    Animation,
-    Weather
-};
-
-// Глобальная переменная текущего режима
-Mode currentMode = Mode::Clock;
-
-void processMode()
-{
-    switch (currentMode)
-    {
-        case Mode::Clock:
-            // processClock();
-            break;
-
-        case Mode::Image:
-            // processImage();
-            break;
-
-        case Mode::Animation:
-            // processAnimation();
-            break;
-
-        case Mode::Weather:
-            // processWeather();
-            break;
-
-        default:
-            break;
-    }
+void loop() {
+  server.handleClient();
+  matrix.clear();
+  processTime();
+  processMode();
+  matrix.show();
 }

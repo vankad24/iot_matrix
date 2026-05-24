@@ -1,8 +1,15 @@
+// Sketch -> Include Library -> Manage libraries
+// ESP8266WiFi
+// PubSubClient by Nich O'Leary
+// WifiEsp by bportaluri
+// Wifi by arduino
 #include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecureBearSSL.h>
 #include <ArduinoJson.h> // by Benoit Blanchon
-
+#include <ESP8266WebServer.h>
 
 //wifi access point
 
@@ -16,22 +23,11 @@ char CLIENT_SSID[] = "NoHornyWifi"; //name of the WiFi to connect to
 char CLIENT_PASS[] = "24242424";
 int SERVER_PORT = 80;
 
-// Sketch -> Include Library -> Manage libraries
-// ESP8266WiFi
-// PubSubClient by Nich O'Leary
-// WifiEsp by bportaluri
-// Wifi by arduino
-#include <ESP8266WiFi.h>
-#include <WiFiClient.h>
-#include <ESP8266WiFiMulti.h>
-
 ESP8266WiFiMulti wifiMulti;
-
-
 String ip = "IP not set";
 
 // Выцепить последние два байта из MAC адреса ESP
-String id() {
+String mac_adress_id() {
   int mac_len = WL_MAC_ADDR_LENGTH;
   uint8_t mac[mac_len];
 
@@ -48,7 +44,7 @@ bool start_ap_mode() {
   IPAddress ap_IP(192, 168, 1, 1);
   IPAddress subnet(255, 255, 255, 0);
 
-  String network_name = AP_NAME + id();
+  String network_name = AP_NAME + mac_adress_id();
   // String network_name = AP_NAME;
 
   WiFi.disconnect();
@@ -98,7 +94,6 @@ void init_wifi(bool AP_mode){
 
 
 //wifi  server
-#include <ESP8266WebServer.h>
 
 static ESP8266WebServer server(80);
 
@@ -173,6 +168,9 @@ String fetch(const String& url,
         if (!http.begin(*plainClient, url))
             return "";
     }
+    if (!body.isEmpty()){
+        http.addHeader("Content-Type", contentType);
+    }
 
     int code = -1;
 
@@ -187,7 +185,6 @@ String fetch(const String& url,
             break;
 
         case Method::PUT:
-            http.addHeader("Content-Type", contentType);
             code = http.sendRequest("PUT", body);
             break;
 
@@ -206,7 +203,7 @@ String fetch(const String& url,
     http.end();
 
 
-    Serial.print("url: ");
+    Serial.print("fetched url: ");
     Serial.print(url);
     Serial.print(" http code: ");
     Serial.print(code);

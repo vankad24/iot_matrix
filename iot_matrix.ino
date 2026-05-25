@@ -1,8 +1,19 @@
+
+
+#define M_PIN 6 //2 для esp
+#define M_WIDTH 16
+#define M_HEIGHT 16
+#define NUM_LEDS (M_WIDTH * M_HEIGHT)
+
+
 // Sketch -> Include Library -> Manage libraries
 // ESP8266WiFi
 // PubSubClient by Nich O'Leary
 // WifiEsp by bportaluri
 // Wifi by arduino
+#include <Arduino.h>
+#include <microLED.h>
+#include <FastLEDsupport.h>    // нужна для шума
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WiFiMulti.h>
@@ -11,12 +22,7 @@
 #include <ArduinoJson.h> // by Benoit Blanchon
 #include <ESP8266WebServer.h>
 #include <LittleFS.h>
-#include <Arduino.h>
 
-#define M_PIN 6
-#define M_WIDTH 16
-#define M_HEIGHT 16
-#define NUM_LEDS (M_WIDTH * M_HEIGHT)
 
 microLED<NUM_LEDS, M_PIN, MLED_NO_CLOCK, LED_WS2812, ORDER_GRB, CLI_AVER, SAVE_MILLIS> matrix(M_WIDTH, M_HEIGHT, ZIGZAG, RIGHT_TOP, DIR_DOWN);
 // RIGHT_TOP, DIR_DOWN);
@@ -57,6 +63,22 @@ struct ModeInfo {
     ModeHandler handler_func;
 };
 
+
+void handleClock(){
+  drawTime(millis()/40000%24, millis()/1000%60,mRGB(0,255,0),mRGB(0,255,255));
+}
+void handleImage(){
+  matrix.fill(mRGB(0,255,0));
+
+}
+void handleAnimation(){
+    matrix.fill(mRGB(255,0,0));
+
+}
+void handleWeather(){
+    matrix.fill(mRGB(0,0,255));
+}
+
 static const ModeInfo modes[] = {
     { Mode::Clock,     "Clock",     handleClock },
     { Mode::Image,     "Image",     handleImage },
@@ -75,7 +97,7 @@ const char* modeToString(Mode mode) {
     return modes[modeToInt(mode)].name;
 }
 void processMode(){
-  modes[id%MODE_COUNT].handler_func();
+  modes[current_mode%MODE_COUNT].handler_func();
 }
 void setMode(Mode mode){
   current_mode = modeToInt(mode);
@@ -93,15 +115,15 @@ bool is_generated_animation=false;
 int animation_delay_ms;
 int32_t current_frame=0;
 int32_t frames_count=0;
-int8_t* animation_frames=nullptr;
-int8_t* image_frame=nullptr;
+uint8_t* animation_frames=nullptr;
+uint8_t* image_frame=nullptr;
 FuncPtr animationFunc=nullptr;
 
 const FuncPtr animation_id_to_func[] = {
   //todo
-}
+};
 
-const int16_t* digitCodes[] = {
+const int16_t digitCodes[] = {
   0b111101101101111, //0
   0b100100100110100, //1
   0b111001010100011, //2
@@ -118,21 +140,6 @@ const int16_t* digitCodes[] = {
 
 // ----------- functions -----------
 
-
-void handleClock(){
-  drawTime(millis()/40000%24, millis()/1000%60,mRGB(0,255,0),mRGB(0,255,255));
-}
-void handleImage(){
-  matrix.fill(mRGB(0,255,0));
-
-}
-void handleAnimation(){
-    matrix.fill(mRGB(255,0,0));
-
-}
-void handleWeather(){
-    matrix.fill(mRGB(0,0,255));
-}
 
 // draw
 void drawDigit(int x, int y, mData color, int8_t digit){
@@ -157,7 +164,7 @@ void drawTime(int8_t hours, int8_t minutes, mData digitColor, mData semicolonCol
 }
 
 
-void drawImage(int x, int y, int width, int height, int8_t* image){
+void drawImage(int x, int y, int width, int height, uint8_t* image){
   for (int i=0; i<height; i++){
     for (int j=0; j<width; j++){
       int index = (i*width+j)*3;
@@ -166,7 +173,7 @@ void drawImage(int x, int y, int width, int height, int8_t* image){
   }
 }
 
-void drawAnimationFrame(int x, int y, int width, int height, int frame_num, int8_t* frames){
+void drawAnimationFrame(int x, int y, int width, int height, int frame_num, uint8_t* frames){
   drawImage(x,y,width,height,frames+width*height*3*frame_num);
 }
 
@@ -180,7 +187,7 @@ void playAnimation(){
   }
 }
 
-void setFramedAnimation(int8_t* frames, int _frames_count){
+void setFramedAnimation(uint8_t* frames, int _frames_count){
   if (animation_frames!=nullptr){
     free(animation_frames);
     animation_frames==nullptr;
@@ -204,7 +211,7 @@ void setGeneratedAnimation(int8_t animation_id){
   animationFunc = animation_id_to_func[animation_id];
 }
 
-void setImage(int8_t* frame){
+void setImage(uint8_t* frame){
   if (image_frame!=nullptr){
     free(image_frame);
     image_frame = nullptr;
@@ -277,7 +284,7 @@ void loadAnimation(int8_t animation_id){
       animation_frames = nullptr;
     }
     int32_t num=0;
-    int8_t* frames=nullptr;
+    uint8_t* frames=nullptr;
     readBytes("/anim", frames, num);
     setFramedAnimation(frames, num);
   }
@@ -288,7 +295,7 @@ void loadImage(){
       free(image_frame);
       image_frame = nullptr;
     }
-    int8_t* frame=nullptr;
+    uint8_t* frame=nullptr;
     readBytes("/image", frame);
     setImage(frame);
 }
@@ -439,7 +446,7 @@ String fetch(const String& url,
 //little file system
 
 // Сохранение массива байт в файл
-bool saveBytes(const char* filename, const uint8_t* data, size_t len)
+bool saveBytes(const char* filename, const uint8_t* data, uint32_t len)
 {
     File file = LittleFS.open(filename, "w");
     if (!file)
@@ -448,7 +455,7 @@ bool saveBytes(const char* filename, const uint8_t* data, size_t len)
         return false;
     }
 
-    size_t written = file.write(data, len);
+    uint32_t written = file.write(data, len);
     file.close();
 
     return (written == len);
@@ -457,7 +464,7 @@ bool saveBytes(const char* filename, const uint8_t* data, size_t len)
 // Чтение массива байт из файла
 // data -> будет выделена память через malloc()
 // len  -> размер прочитанных данных
-bool readBytes(const char* filename, uint8_t*& data, size_t& len)
+bool readBytes(const char* filename, uint8_t*& data, uint32_t& len)
 {
     File file = LittleFS.open(filename, "r");
     if (!file)
@@ -483,7 +490,7 @@ bool readBytes(const char* filename, uint8_t*& data, size_t& len)
         return false;
     }
 
-    size_t readed = file.read(data, len);
+    uint32_t readed = file.read(data, len);
 
     file.close();
 
@@ -556,12 +563,7 @@ bool readStruct(const char* filename, T& data)
 
 void endpoint_status() {
   StaticJsonDocument<256> doc;
-  const char* mode_str = "clock";
-  if (currentMode == Mode::Clock) mode_str = "clock";
-  else if (currentMode == Mode::Image) mode_str = "image";
-  else if (currentMode == Mode::Animation) mode_str = "animation";
-  else if (currentMode == Mode::Weather) mode_str = "weather";
-  doc["mode"] = mode_str;
+  doc["mode"] = modes[current_mode].name;
   doc["brightness"] = settings.brightness;
   doc["ip"] = ip;
   String out;
@@ -573,11 +575,7 @@ void endpoint_set_mode() {
   StaticJsonDocument<128> doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
-  String mode = doc["mode"] | "clock";
-  if (mode == "clock") currentMode = Mode::Clock;
-  else if (mode == "image") currentMode = Mode::Image;
-  else if (mode == "animation") currentMode = Mode::Animation;
-  else if (mode == "weather") currentMode = Mode::Weather;
+  //todo
   server.send(200, "application/json", "{}\n");
 }
 
@@ -609,16 +607,7 @@ void endpoint_set_image() {
   if (err) { server.send(400, "application/json", "{}\n"); return; }
   JsonArray arr = doc["data"].as<JsonArray>();
   if (arr.size() != 256*3) { server.send(400, "application/json", "{}\n"); return; }
-  int8_t image[256*3];
-  for (int i=0; i<256*3; ++i) image[i] = arr[i];
-  // draw image
-  for (int y=0; y<M_HEIGHT; ++y) {
-    for (int x=0; x<M_WIDTH; ++x) {
-      int idx = (y*M_WIDTH + x)*3;
-      matrix.set(x, y, mRGB(image[idx], image[idx+1], image[idx+2]));
-    }
-  }
-  matrix.show();
+  //todo
   server.send(200, "application/json", "{}\n");
 }
 
@@ -629,18 +618,7 @@ void endpoint_set_animation() {
   int frames = doc["frames"] | 0;
   JsonArray arr = doc["data"].as<JsonArray>();
   if (frames <= 0 || arr.size() != frames) { server.send(400, "application/json", "{}\n"); return; }
-  for (int f=0; f<frames; ++f) {
-    JsonArray frame = arr[f].as<JsonArray>();
-    if (frame.size() != 256*3) continue;
-    for (int y=0; y<M_HEIGHT; ++y) {
-      for (int x=0; x<M_WIDTH; ++x) {
-        int idx = (y*M_WIDTH + x)*3;
-        matrix.set(x, y, mRGB(frame[idx], frame[idx+1], frame[idx+2]));
-      }
-    }
-    matrix.show();
-    delay(100);
-  }
+  //todo
   server.send(200, "application/json", "{}\n");
 }
 

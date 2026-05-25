@@ -12,8 +12,7 @@
 // WifiEsp by bportaluri
 // Wifi by arduino
 #include <Arduino.h>
-#include <microLED.h>
-#include <FastLEDsupport.h>    // нужна для шума
+#include <FastLED.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WiFiMulti.h>
@@ -24,9 +23,18 @@
 #include <LittleFS.h>
 
 
-microLED<NUM_LEDS, M_PIN, MLED_NO_CLOCK, LED_WS2812, ORDER_GRB, CLI_AVER, SAVE_MILLIS> matrix(M_WIDTH, M_HEIGHT, ZIGZAG, RIGHT_TOP, DIR_DOWN);
-// RIGHT_TOP, DIR_DOWN);
-//LEFT_TOP, DIR_RIGHT);
+CRGB leds[NUM_LEDS];
+
+// FastLED matrix mapping helpers
+uint16_t XY(uint8_t x, uint8_t y) {
+  // ZIGZAG, RIGHT_TOP, DIR_DOWN mapping for 16x16
+  // Adapt if your wiring differs
+  if (y % 2 == 0) {
+    return y * M_WIDTH + x;
+  } else {
+    return y * M_WIDTH + (M_WIDTH - 1 - x);
+  }
+}
 
 ESP8266WebServer server(80);
 
@@ -65,18 +73,18 @@ struct ModeInfo {
 
 
 void handleClock(){
-  drawTime(millis()/40000%24, millis()/1000%60,mRGB(0,255,0),mRGB(0,255,255));
+  drawTime(millis()/40000%24, millis()/1000%60, CRGB(0,255,0), CRGB(0,255,255));
 }
 void handleImage(){
-  matrix.fill(mRGB(0,255,0));
+  fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
 
 }
 void handleAnimation(){
-    matrix.fill(mRGB(255,0,0));
+    fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
 
 }
 void handleWeather(){
-    matrix.fill(mRGB(0,0,255));
+    fill_solid(leds, NUM_LEDS, CRGB(0,0,255));
 }
 
 static const ModeInfo modes[] = {
@@ -119,6 +127,9 @@ uint8_t* animation_frames=nullptr;
 uint8_t* image_frame=nullptr;
 FuncPtr animationFunc=nullptr;
 
+// mRGB compatibility macro for legacy code
+// #define mRGB(r,g,b) CRGB(r,g,b)
+
 const FuncPtr animation_id_to_func[] = {
   //todo
 };
@@ -142,25 +153,25 @@ const int16_t digitCodes[] = {
 
 
 // draw
-void drawDigit(int x, int y, mData color, int8_t digit){
+void drawDigit(int x, int y, CRGB color, int8_t digit){
   int16_t data = digitCodes[digit];
   int8_t bit_shift = 0;
   for (int8_t i=0; i<5; i++){
     for (int8_t j=0; j<3; j++){
-      if (data>>bit_shift&1)matrix.set(x+j,y+i,color);
+      if (data>>bit_shift&1)leds[XY(x+j, y+i)] = color;
       bit_shift++;
     }
   }
 }
 
-void drawTime(int8_t hours, int8_t minutes, mData digitColor, mData semicolonColor){
+void drawTime(int8_t hours, int8_t minutes, CRGB digitColor, CRGB semicolonColor){
   // if (hours/10) 
     drawDigit(0,5,digitColor,hours/10);
   drawDigit(4,5,digitColor,hours%10);
   drawDigit(8,5,digitColor,minutes/10);
   drawDigit(12,5,digitColor,minutes%10);
-  matrix.set(7,6,semicolonColor);
-  matrix.set(7,8,semicolonColor);
+  leds[XY(7,6)] = semicolonColor;
+  leds[XY(7,8)] = semicolonColor;
 }
 
 
@@ -168,7 +179,7 @@ void drawImage(int x, int y, int width, int height, uint8_t* image){
   for (int i=0; i<height; i++){
     for (int j=0; j<width; j++){
       int index = (i*width+j)*3;
-      matrix.set(x+j,y+i,mRGB(image[index],image[index+1],image[index+2]));
+      leds[XY(x+j, y+i)] = CRGB(image[index], image[index+1], image[index+2]);
     }
   }
 }
@@ -666,8 +677,10 @@ void setup_settings(){
 }
 
 void setup_matrix(){
-  matrix.clear();
-  matrix.setBrightness(settings.brightness);  
+  FastLED.addLeds<WS2812, M_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(settings.brightness);
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  FastLED.show();
 }
 
 void setup_wifi(){
@@ -685,8 +698,8 @@ void setup() {
 
 void loop() {
   server.handleClient();
-  matrix.clear();
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
   processTime();
   processMode();
-  matrix.show();
+  FastLED.show();
 }

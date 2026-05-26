@@ -6,6 +6,8 @@
 #define M_WIDTH 16
 #define M_HEIGHT 16
 #define NUM_LEDS (M_WIDTH * M_HEIGHT)
+#define BTN_NEXT_PIN 12 // D6
+#define BTN_PREV_PIN 13 // D7
 
 
 // Sketch -> Include Library -> Manage libraries
@@ -124,6 +126,14 @@ SyncClock syncClock;
 Timer animationTimer;
 Timer timeSyncTimer;
 
+volatile bool nextButtonIrqFlag = false;
+volatile bool prevButtonIrqFlag = false;
+volatile uint32_t nextButtonIrqUs = 0;
+volatile uint32_t prevButtonIrqUs = 0;
+
+uint32_t nextButtonHandledMs = 0;
+uint32_t prevButtonHandledMs = 0;
+
 //animation vars
 typedef void (*FuncPtr)();
 bool is_generated_animation=false;
@@ -216,6 +226,22 @@ void nextMode(){
 }
 void prevMode(){
   current_mode = (current_mode-1)%MODE_COUNT;
+}
+
+void ICACHE_RAM_ATTR onNextButtonInterrupt() {
+  uint32_t nowUs = micros();
+  if (nowUs - nextButtonIrqUs > 30000UL) {
+    nextButtonIrqUs = nowUs;
+    nextButtonIrqFlag = true;
+  }
+}
+
+void ICACHE_RAM_ATTR onPrevButtonInterrupt() {
+  uint32_t nowUs = micros();
+  if (nowUs - prevButtonIrqUs > 30000UL) {
+    prevButtonIrqUs = nowUs;
+    prevButtonIrqFlag = true;
+  }
 }
 
 // mRGB compatibility macro for legacy code
@@ -765,6 +791,9 @@ void endpoint_set_mode() {
     setMode(Mode::Image);
   } else if (mode == "animation") {
     setMode(Mode::Animation);
+    if (settings.animation_id >= 0) {
+      setGeneratedAnimation(settings.animation_id);
+    }
   } else if (mode == "weather") {
     setMode(Mode::Weather);
   } else {
@@ -821,6 +850,7 @@ void endpoint_set_image() {
 
   saveBytes("/image", frame, NUM_LEDS);
   setImage(frame);
+  setMode(Mode::Image);
   server.send(200, "application/json", "{}\n");
 }
 
@@ -856,6 +886,7 @@ void endpoint_set_animation() {
 
   saveBytes("/anim", buffer, total);
   setFramedAnimation(buffer, frames);
+  setMode(Mode::Animation);
   server.send(200, "application/json", "{}\n");
 }
 
@@ -881,7 +912,10 @@ void setup_endpoints(){
 
 void setup_arduino(){
     Serial.begin(115200);
-    // pinMode()
+    pinMode(BTN_NEXT_PIN, INPUT_PULLUP);
+    pinMode(BTN_PREV_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(BTN_NEXT_PIN), onNextButtonInterrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(BTN_PREV_PIN), onPrevButtonInterrupt, FALLING);
 }
 
 void setup_littlefs(){
@@ -946,6 +980,26 @@ void loop() {
     syncTimeFromInternet();
   }
   fill_solid(leds, NUM_LEDS, CRGB::Black);
+  if (nextButtonIrqFlag) {
+    noInterrupts();
+    nextButtonIrqFlag = false;
+    interrupts();
+    uint32_t nowMs = millis();
+    if (nowMs - nextButtonHandledMs > 80 && digitalRead(BTN_NEXT_PIN) == LOW) {
+      nextButtonHandledMs = nowMs;
+      nextMode();
+    }
+  }
+  if (prevButtonIrqFlag) {
+    noInterrupts();
+    prevButtonIrqFlag = false;
+    interrupts();
+    uint32_t nowMs = millis();
+    if (nowMs - prevButtonHandledMs > 80 && digitalRead(BTN_PREV_PIN) == LOW) {
+      prevButtonHandledMs = nowMs;
+      prevMode();
+    }
+  }
   processTime();
   processMode();
   FastLED.show();

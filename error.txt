@@ -1,0 +1,78 @@
+
+
+
+
+
+
+
+
+
+
+In file included from C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/FastLED.h:100,
+                 from C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino:15:
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/fastspi.h:173:23: note: '#pragma message: WARNING: The SPI pins you chose have not been marked as hardware accelerated within the code base. All SPI access will default to bitbanged output. Consult the data sheet for hardware spi pins designed for efficient SPI transfer, typically via DMA / MOSI / SCK / SS pin'
+  173 | #      pragma message "WARNING: The SPI pins you chose have not been marked as hardware accelerated within the code base. All SPI access will default to bitbanged output. Consult the data sheet for hardware spi pins designed for efficient SPI transfer, typically via DMA / MOSI / SCK / SS pin"
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+iot_matrix:108:19: error: 'Mode' was not declared in this scope
+  108 | uint8_t modeToInt(Mode mode) {
+      |                   ^~~~
+iot_matrix:111:1: error: 'Mode' does not name a type
+  111 | Mode modeFromInt(uint8_t id) {
+      | ^~~~
+iot_matrix:114:27: error: 'Mode' was not declared in this scope
+  114 | const char* modeToString(Mode mode) {
+      |                           ^~~~
+iot_matrix:120:6: error: variable or field 'setMode' declared void
+  120 | void setMode(Mode mode){
+      |      ^~~~~~~
+iot_matrix:120:14: error: 'Mode' was not declared in this scope
+  120 | void setMode(Mode mode){
+      |              ^~~~
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino: In function 'void handleImage()':
+iot_matrix:80:7: error: 'image_frame' was not declared in this scope
+   80 |   if (image_frame == nullptr) {
+      |       ^~~~~~~~~~~
+iot_matrix:85:18: error: 'image_frame' was not declared in this scope
+   85 |     uint8_t px = image_frame[i];
+      |                  ^~~~~~~~~~~
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino: In function 'void handleAnimation()':
+iot_matrix:90:7: error: 'animation_frames' was not declared in this scope
+   90 |   if (animation_frames == nullptr || frames_count <= 0) {
+      |       ^~~~~~~~~~~~~~~~
+iot_matrix:90:38: error: 'frames_count' was not declared in this scope
+   90 |   if (animation_frames == nullptr || frames_count <= 0) {
+      |                                      ^~~~~~~~~~~~
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino: At global scope:
+iot_matrix:108:28: error: 'uint8_t modeToInt(Mode)' redeclared as different kind of entity
+  108 | uint8_t modeToInt(Mode mode) {
+      |                            ^
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino:108:9: note: previous declaration 'uint8_t modeToInt'
+  108 | uint8_t modeToInt(Mode mode) {
+      |         ^~~~~~~~~
+iot_matrix:114:35: error: 'const char* modeToString(Mode)' redeclared as different kind of entity
+  114 | const char* modeToString(Mode mode) {
+      |                                   ^
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino:114:14: note: previous declaration 'const char* modeToString'
+  114 | const char* modeToString(Mode mode) {
+      |              ^~~~~~~~~~~~
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino: In function 'const char* modeToString(Mode)':
+iot_matrix:115:32: error: 'modeToInt' cannot be used as a function
+  115 |     return modes[modeToInt(mode)].name;
+      |                                ^
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino: In function 'void setMode(Mode)':
+iot_matrix:121:32: error: 'modeToInt' cannot be used as a function
+  121 |   current_mode = modeToInt(mode);
+      |                                ^
+In file included from C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/FastLED.h:83,
+                 from C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino:15:
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/fastpin.h: In instantiation of 'class FastPin<6>':
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/platforms/esp/8266/clockless_esp8266.h:26:49:   required from 'class ClocklessController<6, 20, 50, 30, fl::GRB, 0, false, 85>'
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/chipsets.h:1064:7:   required from 'class WS2812Controller800Khz<6, fl::GRB>'
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/FastLED.h:218:7:   required from 'class WS2812<6, fl::GRB>'
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/FastLED.h:592:39:   required from 'static CLEDController& CFastLED::addLeds(CRGB*, int, int) [with CHIPSET = WS2812; unsigned char DATA_PIN = 6; fl::EOrder RGB_ORDER = fl::GRB]'
+C:\Users\Vanya\Documents\Arduino\iot_matrix\iot_matrix.ino:756:53:   required from here
+C:\Users\Vanya\Documents\Arduino\libraries\FastLED-3.10.3\src/fastpin.h:368:24: error: static assertion failed: This pin has been marked as an invalid pin, common reasons includes it being a ground pin, read only, or too noisy (e.g. hooked up to the uart).
+  368 |  static_assert(validpin(), "This pin has been marked as an invalid pin, common reasons includes it being a ground pin, read only, or too noisy (e.g. hooked up to the uart).");
+      |                ~~~~~~~~^~
+exit status 1
+'Mode' was not declared in this scope

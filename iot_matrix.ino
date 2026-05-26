@@ -1,7 +1,6 @@
 
 
 #include <stdint.h>
-enum class Mode : uint8_t { Clock, Image, Animation, Weather };
 
 #define M_PIN 2 // GPIO2 (D4) для esp8266
 #define M_WIDTH 16
@@ -65,6 +64,66 @@ struct Settings {
   int animation_id = 0;
 } settings;
 
+class Timer {
+public:
+    void start(uint32_t interval_ms, uint32_t start_time = millis(), bool repeat = true) {
+        interval = interval_ms;
+        next = start_time;
+        isRepeat = repeat;
+        running = true;
+    }
+
+    bool check(uint32_t now = millis()) {
+        if (!running) return false;
+        if ((int32_t)(now - next) >= 0) {
+            if (isRepeat) {
+                next += interval;
+            } else {
+                running = false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+private:
+    uint32_t interval = 0;
+    uint32_t next = 0;
+    bool running = false;
+    bool isRepeat = false;
+};
+
+class SyncClock {
+public:
+    static uint32_t toSeconds(uint8_t hour, uint8_t minute, uint8_t second) {
+        return hour * 3600UL + minute * 60UL + second;
+    }
+
+    void setTime(uint8_t hour, uint8_t minute, uint8_t second) {
+        baseTimeSeconds = toSeconds(hour, minute, second);
+        lastSyncMillis = millis();
+        synced = true;
+    }
+
+    void getTime(uint8_t& h, uint8_t& m, uint8_t& s) const {
+        uint32_t t = baseTimeSeconds + (millis() - lastSyncMillis) / 1000;
+        s = t % 60;
+        m = (t / 60) % 60;
+        h = (t / 3600) % 24;
+    }
+
+    bool isSynced() const { return synced; }
+
+private:
+    uint32_t baseTimeSeconds = 0;
+    uint32_t lastSyncMillis = 0;
+    bool synced = false;
+};
+
+SyncClock syncClock;
+Timer animationTimer;
+Timer timeSyncTimer;
+
 //animation vars
 typedef void (*FuncPtr)();
 bool is_generated_animation=false;
@@ -78,50 +137,79 @@ FuncPtr animationFunc=nullptr;
 //modes
 uint8_t current_mode = 0;
 using ModeHandler = void (*)();
+
+class Mode {
+public:
+    static constexpr uint8_t Clock = 0;
+    static constexpr uint8_t Image = 1;
+    static constexpr uint8_t Animation = 2;
+    static constexpr uint8_t Weather = 3;
+};
+
 struct ModeInfo {
-    Mode mode;
+    uint8_t mode;
     const char* name;
     ModeHandler handler_func;
 };
 
 
 void handleClock(){
-  drawTime(millis()/40000%24, millis()/1000%60, CRGB(0,255,0), CRGB(0,255,255));
+  uint8_t h = 0;
+  uint8_t m = 0;
+  uint8_t s = 0;
+  if (syncClock.isSynced()) {
+    syncClock.getTime(h, m, s);
+  } else {
+    h = (millis() / 3600000UL) % 24;
+    m = (millis() / 60000UL) % 60;
+  }
+  drawTime(h, m, CRGB(0,255,0), CRGB(0,255,255));
 }
 void handleImage(){
-  fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
-
+  if (image_frame == nullptr) {
+    fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
+    return;
+  }
+  for (int i = 0; i < NUM_LEDS; i++) {
+    uint8_t px = image_frame[i];
+    leds[i] = CRGB(px, px, px);
+  }
 }
 void handleAnimation(){
+  if (is_generated_animation) {
+    if (animationTimer.check()) {
+      playAnimation();
+    }
+    return;
+  }
+  if (animation_frames == nullptr || frames_count <= 0) {
     fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
-
+    return;
+  }
+  if (animationTimer.check()) {
+    playAnimation();
+  }
 }
 void handleWeather(){
     fill_solid(leds, NUM_LEDS, CRGB(0,0,255));
 }
 
 static const ModeInfo modes[] = {
-    { Mode::Clock,     "Clock",     handleClock },
-    { Mode::Image,     "Image",     handleImage },
-    { Mode::Animation, "Animation", handleAnimation },
-    { Mode::Weather,   "Weather",   handleWeather }
+    { Mode::Clock,     "clock",     handleClock },
+    { Mode::Image,     "image",     handleImage },
+    { Mode::Animation, "animation", handleAnimation },
+    { Mode::Weather,   "weather",   handleWeather }
 };
 constexpr uint8_t MODE_COUNT = sizeof(modes) / sizeof(modes[0]);
 
-uint8_t modeToInt(Mode mode) {
-    return static_cast<uint8_t>(mode);
-}
-Mode modeFromInt(uint8_t id) {
-    return modes[id%MODE_COUNT].mode;
-}
-const char* modeToString(Mode mode) {
-    return modes[modeToInt(mode)].name;
+const char* modeToString(uint8_t mode) {
+    return modes[mode % MODE_COUNT].name;
 }
 void processMode(){
   modes[current_mode%MODE_COUNT].handler_func();
 }
-void setMode(Mode mode){
-  current_mode = modeToInt(mode);
+void setMode(uint8_t mode){
+  current_mode = mode%MODE_COUNT;
 }
 void nextMode(){
   current_mode = (current_mode+1)%MODE_COUNT;
@@ -134,7 +222,35 @@ void prevMode(){
 // #define mRGB(r,g,b) CRGB(r,g,b)
 
 const FuncPtr animation_id_to_func[] = {
-  nullptr
+  []() {
+    static uint8_t hue = 0;
+    hue += 2;
+    for (uint8_t y = 0; y < M_HEIGHT; y++) {
+      for (uint8_t x = 0; x < M_WIDTH; x++) {
+        leds[XY(x, y)] = CHSV(hue + (x + y) * 8, 255, 255);
+      }
+    }
+  },
+  []() {
+    fadeToBlackBy(leds, NUM_LEDS, 24);
+    leds[random16(NUM_LEDS)] += CHSV(random8(), 200, 255);
+  },
+  []() {
+    static uint16_t t = 0;
+    t += 20;
+    for (uint8_t y = 0; y < M_HEIGHT; y++) {
+      for (uint8_t x = 0; x < M_WIDTH; x++) {
+        uint8_t v = inoise8(x * 32, y * 32, t);
+        leds[XY(x, y)] = CHSV(map(v, 0, 255, 0, 40), 255, v);
+      }
+    }
+  },
+  []() {
+    static uint8_t pos = 0;
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    leds[XY(pos % M_WIDTH, pos / M_WIDTH)] = CRGB::White;
+    pos = (pos + 1) % NUM_LEDS;
+  }
 };
 
 const int16_t digitCodes[] = {
@@ -194,9 +310,15 @@ void drawAnimationFrame(int x, int y, int width, int height, int frame_num, uint
 void playAnimation(){
   if (is_generated_animation){
     current_frame+=1;
-    animationFunc();
+    if (animationFunc != nullptr) {
+      animationFunc();
+    }
   }else{
-    drawAnimationFrame(0,0,M_WIDTH,M_HEIGHT,current_frame,animation_frames);
+    int32_t frame_offset = current_frame * NUM_LEDS;
+    for (int i = 0; i < NUM_LEDS; i++) {
+      uint8_t px = animation_frames[frame_offset + i];
+      leds[i] = CRGB(px, px, px);
+    }
     current_frame=(current_frame+1)%frames_count;
   }
 }
@@ -228,7 +350,11 @@ void setGeneratedAnimation(int8_t animation_id){
   } else {
     animationFunc = nullptr;
   }
+  animationTimer.start((uint32_t)max(animation_delay_ms, 30), millis(), true);
 }
+
+void parseAndSetTime(const String& response);
+void syncTimeFromInternet();
 
 void setImage(uint8_t* frame){
   if (image_frame!=nullptr){
@@ -464,6 +590,29 @@ String fetch(const String& url,
     return response;
 }
 
+void parseAndSetTime(const String& response) {
+  DynamicJsonDocument doc(1024);
+  DeserializationError err = deserializeJson(doc, response);
+  if (err) return;
+
+  String datetime = doc["datetime"] | "";
+  if (datetime.length() < 19) return;
+
+  uint8_t hh = (datetime.substring(11, 13)).toInt();
+  uint8_t mm = (datetime.substring(14, 16)).toInt();
+  uint8_t ss = (datetime.substring(17, 19)).toInt();
+  syncClock.setTime(hh, mm, ss);
+}
+
+void syncTimeFromInternet() {
+  String _ipInfo = fetch("http://ipinfo.io/json");
+  (void)_ipInfo;
+  String response = fetch("https://nordapi.ee/api/v1/time/current?timezone=Asia/Irkutsk");
+  if (response.length() > 0) {
+    parseAndSetTime(response);
+  }
+}
+
 //little file system
 
 // Сохранение массива байт в файл
@@ -589,8 +738,13 @@ bool readStruct(const char* filename, T& data)
 //endpoints
 
 void endpoint_status() {
+  const char* mode = "clock";
+  if (modes[current_mode].mode == Mode::Image) mode = "image";
+  if (modes[current_mode].mode == Mode::Animation) mode = "animation";
+  if (modes[current_mode].mode == Mode::Weather) mode = "weather";
+
   StaticJsonDocument<256> doc;
-  doc["mode"] = modes[current_mode].name;
+  doc["mode"] = mode;
   doc["brightness"] = settings.brightness;
   doc["ip"] = ip;
   String out;
@@ -602,7 +756,23 @@ void endpoint_set_mode() {
   StaticJsonDocument<128> doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
-  //todo
+
+  String mode = doc["mode"] | "";
+  mode.toLowerCase();
+  if (mode == "clock") {
+    setMode(Mode::Clock);
+  } else if (mode == "image") {
+    setMode(Mode::Image);
+  } else if (mode == "animation") {
+    setMode(Mode::Animation);
+  } else if (mode == "weather") {
+    setMode(Mode::Weather);
+  } else {
+    server.send(400, "application/json", "{\"error\":\"invalid mode\"}\n");
+    return;
+  }
+
+  saveSettings();
   server.send(200, "application/json", "{}\n");
 }
 
@@ -613,6 +783,8 @@ void endpoint_set_settings() {
   settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
   settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
   settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
+  settings.brightness = settings.max_brightness;
+  FastLED.setBrightness(settings.brightness);
   saveSettings();
   server.send(200, "application/json", "{}\n");
 }
@@ -629,23 +801,61 @@ void endpoint_set_wifi() {
 }
 
 void endpoint_set_image() {
-  StaticJsonDocument<256> doc;
+  DynamicJsonDocument doc(4096);
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
   JsonArray arr = doc["data"].as<JsonArray>();
-  if (arr.size() != 256*3) { server.send(400, "application/json", "{}\n"); return; }
-  //todo
+  if (arr.size() != NUM_LEDS) { server.send(400, "application/json", "{}\n"); return; }
+
+  uint8_t* frame = (uint8_t*)malloc(NUM_LEDS);
+  if (frame == nullptr) {
+    server.send(500, "application/json", "{}\n");
+    return;
+  }
+  for (int i = 0; i < NUM_LEDS; i++) {
+    int value = arr[i] | 0;
+    if (value < 0) value = 0;
+    if (value > 255) value = 255;
+    frame[i] = (uint8_t)value;
+  }
+
+  saveBytes("/image", frame, NUM_LEDS);
+  setImage(frame);
   server.send(200, "application/json", "{}\n");
 }
 
 void endpoint_set_animation() {
-  StaticJsonDocument<1024> doc;
+  DynamicJsonDocument doc(32768);
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
   int frames = doc["frames"] | 0;
   JsonArray arr = doc["data"].as<JsonArray>();
   if (frames <= 0 || arr.size() != frames) { server.send(400, "application/json", "{}\n"); return; }
-  //todo
+
+  uint32_t total = (uint32_t)frames * NUM_LEDS;
+  uint8_t* buffer = (uint8_t*)malloc(total);
+  if (buffer == nullptr) {
+    server.send(500, "application/json", "{}\n");
+    return;
+  }
+
+  for (int f = 0; f < frames; f++) {
+    JsonArray frame = arr[f].as<JsonArray>();
+    if (frame.size() != NUM_LEDS) {
+      free(buffer);
+      server.send(400, "application/json", "{\"error\":\"frame must have 256 bytes\"}\n");
+      return;
+    }
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int value = frame[i] | 0;
+      if (value < 0) value = 0;
+      if (value > 255) value = 255;
+      buffer[f * NUM_LEDS + i] = (uint8_t)value;
+    }
+  }
+
+  saveBytes("/anim", buffer, total);
+  setFramedAnimation(buffer, frames);
   server.send(200, "application/json", "{}\n");
 }
 
@@ -697,10 +907,28 @@ void setup_matrix(){
   FastLED.setBrightness(settings.brightness);
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   FastLED.show();
+  animation_delay_ms = 120;
+  animationTimer.start(animation_delay_ms, millis(), true);
 }
 
 void setup_wifi(){
-  //todo
+  WiFi.mode(WIFI_STA);
+  wifiMulti.addAP(settings.wifi, settings.pass);
+  Serial.println("Trying connect to saved WiFi...");
+  uint32_t started = millis();
+  while (wifiMulti.run() != WL_CONNECTED && millis() - started < 15000) {
+    delay(200);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    ip = WiFi.localIP().toString();
+    Serial.print("Client mode started, IP: ");
+    Serial.println(ip);
+    syncTimeFromInternet();
+    timeSyncTimer.start(10UL * 60UL * 1000UL, millis(), true);
+  } else {
+    Serial.println("WiFi connect failed, fallback to AP");
+    start_ap_mode();
+  }
 }
 
 void setup() {
@@ -714,6 +942,9 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  if (WiFi.status() == WL_CONNECTED && timeSyncTimer.check()) {
+    syncTimeFromInternet();
+  }
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   processTime();
   processMode();

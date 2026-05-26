@@ -1,4 +1,3 @@
-
 class Timer {
 public:
     void start(uint32_t interval_ms, uint32_t start_time = millis(), bool repeat = true) {

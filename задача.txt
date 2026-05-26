@@ -1,0 +1,70 @@
+
+Переделать mode на это:
+
+//modes
+uint8_t current_mode = 0;
+using ModeHandler = void (*)();
+
+class Mode {
+public:
+    static constexpr uint8_t Clock = 0;
+    static constexpr uint8_t Image = 1;
+    static constexpr uint8_t Animation = 2;
+    static constexpr uint8_t Weather = 3;
+};
+
+struct ModeInfo {
+    uint8_t mode;
+    const char* name;
+    ModeHandler handler_func;
+};
+
+void handleClock(){
+}
+
+void handleImage(){
+}
+
+void handleAnimation(){
+}
+
+void handleWeather(){
+}
+
+
+static const ModeInfo modes[] = {
+    { Mode::Clock,     "Clock",     handleClock },
+    { Mode::Image,     "Image",     handleImage },
+    { Mode::Animation, "Animation", handleAnimation },
+    { Mode::Weather,   "Weather",   handleWeather }
+};
+constexpr uint8_t MODE_COUNT = sizeof(modes) / sizeof(modes[0]);
+
+const char* modeToString(uint8_t mode) {
+    return modes[mode].name;
+}
+void processMode(){
+  modes[current_mode%MODE_COUNT].handler_func();
+}
+void setMode(uint8_t mode){
+  current_mode = mode%MODE_COUNT;
+}
+void nextMode(){
+  current_mode = (current_mode+1)%MODE_COUNT;
+}
+void prevMode(){
+  current_mode = (current_mode-1)%MODE_COUNT;
+}
+
+
+
+Добавить функции анимаций из animation_functions.txt
+
+
+
+Исползовать синхронизацию времени пример в time_sync.ino
+Получать данные из интернета:
+fetch("http://ipinfo.io/json");
+String response = fetch("https://nordapi.ee/api/v1/time/current?timezone=Asia/Irkutsk");
+
+Использовать для задержек таймер. пример в timer.ino

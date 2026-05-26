@@ -1,0 +1,53 @@
+
+class Timer {
+public:
+    void start(uint32_t interval_ms, uint32_t start_time = millis(), bool repeat = true) {
+        interval = interval_ms;
+        next = start_time;
+        isRepeat = repeat;
+        running = true;
+    }
+
+    bool check(uint32_t now = millis()) {
+        if (!running) return false;
+
+        // if (now - last >= interval) { // c накоплением ошибок
+        if ((int32_t)(now - next) >= 0){ // без накопления ошибки с защитой от переполнения
+            if (isRepeat) {
+                next += interval;
+            } else {
+                running = false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    void reset(uint32_t now = millis()){ next = now+interval; }
+
+    bool isActive() const { return running; }
+
+    void stop(){ running = false; }
+    
+private:
+    uint32_t interval = 0;
+    uint32_t next = 0;
+    bool running = false;
+    bool isRepeat = false;
+};
+
+
+// Пример
+Timer ledTimer(500);
+
+void setup() {
+    pinMode(LED_BUILTIN, OUTPUT);
+}
+
+void loop() {
+    uint32_t currentTime = millis();
+
+    if (ledTimer.check(currentTime)) {
+        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    }
+}

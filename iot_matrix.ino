@@ -1,6 +1,9 @@
 
 
-#define M_PIN 6 //2 для esp
+#include <stdint.h>
+enum class Mode : uint8_t { Clock, Image, Animation, Weather };
+
+#define M_PIN 2 // GPIO2 (D4) для esp8266
 #define M_WIDTH 16
 #define M_HEIGHT 16
 #define NUM_LEDS (M_WIDTH * M_HEIGHT)
@@ -21,6 +24,7 @@
 #include <ArduinoJson.h> // by Benoit Blanchon
 #include <ESP8266WebServer.h>
 #include <LittleFS.h>
+#include <memory>
 
 
 CRGB leds[NUM_LEDS];
@@ -61,10 +65,19 @@ struct Settings {
   int animation_id = 0;
 } settings;
 
+//animation vars
+typedef void (*FuncPtr)();
+bool is_generated_animation=false;
+int animation_delay_ms;
+int32_t current_frame=0;
+int32_t frames_count=0;
+uint8_t* animation_frames=nullptr;
+uint8_t* image_frame=nullptr;
+FuncPtr animationFunc=nullptr;
+
 //modes
 uint8_t current_mode = 0;
 using ModeHandler = void (*)();
-enum class Mode : uint8_t { Clock, Image, Animation, Weather };
 struct ModeInfo {
     Mode mode;
     const char* name;
@@ -117,21 +130,11 @@ void prevMode(){
   current_mode = (current_mode-1)%MODE_COUNT;
 }
 
-//animation vars
-typedef void (*FuncPtr)();
-bool is_generated_animation=false;
-int animation_delay_ms;
-int32_t current_frame=0;
-int32_t frames_count=0;
-uint8_t* animation_frames=nullptr;
-uint8_t* image_frame=nullptr;
-FuncPtr animationFunc=nullptr;
-
 // mRGB compatibility macro for legacy code
 // #define mRGB(r,g,b) CRGB(r,g,b)
 
 const FuncPtr animation_id_to_func[] = {
-  //todo
+  nullptr
 };
 
 const int16_t digitCodes[] = {
@@ -201,7 +204,7 @@ void playAnimation(){
 void setFramedAnimation(uint8_t* frames, int _frames_count){
   if (animation_frames!=nullptr){
     free(animation_frames);
-    animation_frames==nullptr;
+    animation_frames = nullptr;
   }
   is_generated_animation=false;
   current_frame = 0;
@@ -214,12 +217,17 @@ void setFramedAnimation(uint8_t* frames, int _frames_count){
 void setGeneratedAnimation(int8_t animation_id){
   if (animation_frames!=nullptr){
     free(animation_frames);
-    animation_frames==nullptr;
+    animation_frames = nullptr;
   }
   is_generated_animation = true;
   current_frame = 0;
   settings.animation_id = animation_id;
-  animationFunc = animation_id_to_func[animation_id];
+  int8_t func_count = sizeof(animation_id_to_func) / sizeof(animation_id_to_func[0]);
+  if (animation_id >= 0 && animation_id < func_count) {
+    animationFunc = animation_id_to_func[animation_id];
+  } else {
+    animationFunc = nullptr;
+  }
 }
 
 void setImage(uint8_t* frame){
@@ -294,10 +302,12 @@ void loadAnimation(int8_t animation_id){
       free(animation_frames);
       animation_frames = nullptr;
     }
-    int32_t num=0;
+    uint32_t num=0;
     uint8_t* frames=nullptr;
     readBytes("/anim", frames, num);
-    setFramedAnimation(frames, num);
+    if (frames != nullptr && num >= NUM_LEDS) {
+      setFramedAnimation(frames, num / NUM_LEDS);
+    }
   }
 }
 
@@ -315,8 +325,8 @@ void loadImage(){
 
 // Выцепить последние два байта из MAC адреса ESP
 String mac_adress_id() {
-  int mac_len = WL_MAC_ADDR_LENGTH;
-  uint8_t mac[mac_len];
+  const int mac_len = WL_MAC_ADDR_LENGTH;
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
 
   WiFi.softAPmacAddress(mac);
 
@@ -514,6 +524,12 @@ bool readBytes(const char* filename, uint8_t*& data, uint32_t& len)
     }
 
     return true;
+}
+
+bool readBytes(const char* filename, uint8_t*& data)
+{
+    uint32_t len = 0;
+    return readBytes(filename, data, len);
 }
 
 

@@ -21,6 +21,7 @@
 #include <ArduinoJson.h> // by Benoit Blanchon
 #include <ESP8266WebServer.h>
 #include <LittleFS.h>
+#include <memory>
 
 
 CRGB leds[NUM_LEDS];
@@ -76,12 +77,21 @@ void handleClock(){
   drawTime(millis()/40000%24, millis()/1000%60, CRGB(0,255,0), CRGB(0,255,255));
 }
 void handleImage(){
-  fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
-
+  if (image_frame == nullptr) {
+    fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
+    return;
+  }
+  for (int i = 0; i < NUM_LEDS; i++) {
+    uint8_t px = image_frame[i];
+    leds[i] = CRGB(px, px, px);
+  }
 }
 void handleAnimation(){
+  if (animation_frames == nullptr || frames_count <= 0) {
     fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
-
+    return;
+  }
+  playAnimation();
 }
 void handleWeather(){
     fill_solid(leds, NUM_LEDS, CRGB(0,0,255));
@@ -131,7 +141,7 @@ FuncPtr animationFunc=nullptr;
 // #define mRGB(r,g,b) CRGB(r,g,b)
 
 const FuncPtr animation_id_to_func[] = {
-  //todo
+  nullptr
 };
 
 const int16_t digitCodes[] = {
@@ -191,9 +201,15 @@ void drawAnimationFrame(int x, int y, int width, int height, int frame_num, uint
 void playAnimation(){
   if (is_generated_animation){
     current_frame+=1;
-    animationFunc();
+    if (animationFunc != nullptr) {
+      animationFunc();
+    }
   }else{
-    drawAnimationFrame(0,0,M_WIDTH,M_HEIGHT,current_frame,animation_frames);
+    int32_t frame_offset = current_frame * NUM_LEDS;
+    for (int i = 0; i < NUM_LEDS; i++) {
+      uint8_t px = animation_frames[frame_offset + i];
+      leds[i] = CRGB(px, px, px);
+    }
     current_frame=(current_frame+1)%frames_count;
   }
 }
@@ -201,7 +217,7 @@ void playAnimation(){
 void setFramedAnimation(uint8_t* frames, int _frames_count){
   if (animation_frames!=nullptr){
     free(animation_frames);
-    animation_frames==nullptr;
+    animation_frames = nullptr;
   }
   is_generated_animation=false;
   current_frame = 0;
@@ -214,12 +230,17 @@ void setFramedAnimation(uint8_t* frames, int _frames_count){
 void setGeneratedAnimation(int8_t animation_id){
   if (animation_frames!=nullptr){
     free(animation_frames);
-    animation_frames==nullptr;
+    animation_frames = nullptr;
   }
   is_generated_animation = true;
   current_frame = 0;
   settings.animation_id = animation_id;
-  animationFunc = animation_id_to_func[animation_id];
+  int8_t func_count = sizeof(animation_id_to_func) / sizeof(animation_id_to_func[0]);
+  if (animation_id >= 0 && animation_id < func_count) {
+    animationFunc = animation_id_to_func[animation_id];
+  } else {
+    animationFunc = nullptr;
+  }
 }
 
 void setImage(uint8_t* frame){
@@ -294,10 +315,12 @@ void loadAnimation(int8_t animation_id){
       free(animation_frames);
       animation_frames = nullptr;
     }
-    int32_t num=0;
+    uint32_t num=0;
     uint8_t* frames=nullptr;
     readBytes("/anim", frames, num);
-    setFramedAnimation(frames, num);
+    if (frames != nullptr && num >= NUM_LEDS) {
+      setFramedAnimation(frames, num / NUM_LEDS);
+    }
   }
 }
 
@@ -315,8 +338,8 @@ void loadImage(){
 
 // Выцепить последние два байта из MAC адреса ESP
 String mac_adress_id() {
-  int mac_len = WL_MAC_ADDR_LENGTH;
-  uint8_t mac[mac_len];
+  const int mac_len = WL_MAC_ADDR_LENGTH;
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
 
   WiFi.softAPmacAddress(mac);
 
@@ -516,6 +539,12 @@ bool readBytes(const char* filename, uint8_t*& data, uint32_t& len)
     return true;
 }
 
+bool readBytes(const char* filename, uint8_t*& data)
+{
+    uint32_t len = 0;
+    return readBytes(filename, data, len);
+}
+
 
 // Сохранение структуры
 template<typename T>
@@ -586,7 +615,21 @@ void endpoint_set_mode() {
   StaticJsonDocument<128> doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
-  //todo
+  String mode = doc["mode"] | "";
+  mode.toLowerCase();
+  if (mode == "clock") {
+    setMode(Mode::Clock);
+  } else if (mode == "image") {
+    setMode(Mode::Image);
+  } else if (mode == "animation") {
+    setMode(Mode::Animation);
+  } else if (mode == "weather") {
+    setMode(Mode::Weather);
+  } else {
+    server.send(400, "application/json", "{\"error\":\"invalid mode\"}\n");
+    return;
+  }
+  saveSettings();
   server.send(200, "application/json", "{}\n");
 }
 
@@ -613,23 +656,56 @@ void endpoint_set_wifi() {
 }
 
 void endpoint_set_image() {
-  StaticJsonDocument<256> doc;
+  DynamicJsonDocument doc(4096);
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
   JsonArray arr = doc["data"].as<JsonArray>();
-  if (arr.size() != 256*3) { server.send(400, "application/json", "{}\n"); return; }
-  //todo
+  if (arr.size() != NUM_LEDS) { server.send(400, "application/json", "{}\n"); return; }
+  uint8_t* frame = (uint8_t*)malloc(NUM_LEDS);
+  if (frame == nullptr) {
+    server.send(500, "application/json", "{}\n");
+    return;
+  }
+  for (int i = 0; i < NUM_LEDS; i++) {
+    int v = arr[i] | 0;
+    if (v < 0) v = 0;
+    if (v > 255) v = 255;
+    frame[i] = (uint8_t)v;
+  }
+  saveBytes("/image", frame, NUM_LEDS);
+  setImage(frame);
   server.send(200, "application/json", "{}\n");
 }
 
 void endpoint_set_animation() {
-  StaticJsonDocument<1024> doc;
+  DynamicJsonDocument doc(32768);
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
   int frames = doc["frames"] | 0;
   JsonArray arr = doc["data"].as<JsonArray>();
   if (frames <= 0 || arr.size() != frames) { server.send(400, "application/json", "{}\n"); return; }
-  //todo
+  uint32_t total = frames * NUM_LEDS;
+  uint8_t* buffer = (uint8_t*)malloc(total);
+  if (buffer == nullptr) {
+    server.send(500, "application/json", "{}\n");
+    return;
+  }
+  for (int f = 0; f < frames; f++) {
+    JsonArray frame = arr[f].as<JsonArray>();
+    if (frame.size() != NUM_LEDS) {
+      free(buffer);
+      server.send(400, "application/json", "{\"error\":\"frame must have 256 values\"}\n");
+      return;
+    }
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int v = frame[i] | 0;
+      if (v < 0) v = 0;
+      if (v > 255) v = 255;
+      buffer[f * NUM_LEDS + i] = (uint8_t)v;
+    }
+  }
+  saveBytes("/anim", buffer, total);
+  setFramedAnimation(buffer, frames);
   server.send(200, "application/json", "{}\n");
 }
 
@@ -684,7 +760,21 @@ void setup_matrix(){
 }
 
 void setup_wifi(){
-  //todo
+  WiFi.mode(WIFI_STA);
+  wifiMulti.addAP(settings.wifi, settings.pass);
+  Serial.println("Trying connect to saved WiFi...");
+  uint32_t started = millis();
+  while (wifiMulti.run() != WL_CONNECTED && millis() - started < 15000) {
+    delay(200);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    ip = WiFi.localIP().toString();
+    Serial.print("Client mode started, IP: ");
+    Serial.println(ip);
+  } else {
+    Serial.println("WiFi connect failed, fallback to AP");
+    start_ap_mode();
+  }
 }
 
 void setup() {

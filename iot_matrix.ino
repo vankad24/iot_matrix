@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#define M_PIN 2 // GPIO2 (D4) для esp8266
+#define M_PIN 13 // GPIO13 (D7) для esp8266
 #define M_WIDTH 16
 #define M_HEIGHT 16
 #define NUM_LEDS (M_WIDTH * M_HEIGHT)
@@ -16,6 +16,8 @@
 // WifiEsp by bportaluri
 // Wifi by arduino
 #include <Arduino.h>
+
+#define FASTLED_ESP8266_RAW_PIN_ORDER
 #include <FastLED.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -32,14 +34,13 @@ CRGB leds[NUM_LEDS];
 
 // FastLED matrix mapping helpers
 uint16_t XY(uint8_t x, uint8_t y) {
-  // ZIGZAG, RIGHT_TOP, DIR_DOWN mapping for 16x16
-  // Adapt if your wiring differs
   if (y % 2 == 0) {
-    return y * M_WIDTH + x;
+    return NUM_LEDS-1 - y * M_WIDTH - x;
   } else {
-    return y * M_WIDTH + (M_WIDTH - 1 - x);
+    return NUM_LEDS-1 - y * M_WIDTH - (M_WIDTH - 1) + x;
   }
 }
+
 
 ESP8266WebServer server(80);
 
@@ -65,6 +66,9 @@ struct Settings {
   int sleep_delay = 10;
   int animation_id = 0;
 } settings;
+
+
+
 
 class Timer {
 public:
@@ -95,34 +99,64 @@ private:
     bool isRepeat = false;
 };
 
+
+
 class SyncClock {
 public:
+    // Конвертация
     static uint32_t toSeconds(uint8_t hour, uint8_t minute, uint8_t second) {
         return hour * 3600UL + minute * 60UL + second;
     }
 
+    // Установка времени из сервера (hh:mm:ss)
     void setTime(uint8_t hour, uint8_t minute, uint8_t second) {
         baseTimeSeconds = toSeconds(hour, minute, second);
         lastSyncMillis = millis();
-        synced = true;
     }
 
-    void getTime(uint8_t& h, uint8_t& m, uint8_t& s) const {
-        uint32_t t = baseTimeSeconds + (millis() - lastSyncMillis) / 1000;
+    // Альтернатива: если есть epoch seconds
+    void setTime(uint32_t epochSeconds) {
+        baseTimeSeconds = epochSeconds;
+        lastSyncMillis = millis();
+    }
+
+    // Текущее время в секундах
+    uint32_t getCurrentTimeSeconds() const {
+        return baseTimeSeconds + (millis() - lastSyncMillis) / 1000;
+    }
+
+    // Получить H/M/S
+    void getTime(uint8_t &h, uint8_t &m, uint8_t &s) const {
+        uint32_t t = getCurrentTimeSeconds();
+
         s = t % 60;
         m = (t / 60) % 60;
         h = (t / 3600) % 24;
     }
+    
+    uint32_t getBaseTime() const {
+        return baseTimeSeconds;
+    }
 
-    bool isSynced() const { return synced; }
+    uint32_t getLastSyncMillis() const {
+        return lastSyncMillis;
+    }
+
 
 private:
-    uint32_t baseTimeSeconds = 0;
-    uint32_t lastSyncMillis = 0;
-    bool synced = false;
+    uint32_t baseTimeSeconds=0;     // время от сервера в секундах (epochSeconds)
+    uint32_t lastSyncMillis=0;      // когда была последняя синхронизация в мс
 };
 
+
+
+
 SyncClock syncClock;
+uint8_t hour=0;
+uint8_t minute=0;
+uint8_t second=0;
+
+
 Timer animationTimer;
 Timer timeSyncTimer;
 
@@ -137,7 +171,7 @@ uint32_t prevButtonHandledMs = 0;
 //animation vars
 typedef void (*FuncPtr)();
 bool is_generated_animation=false;
-int animation_delay_ms;
+uint16_t animation_delay_ms = 100;
 int32_t current_frame=0;
 int32_t frames_count=0;
 uint8_t* animation_frames=nullptr;
@@ -164,41 +198,17 @@ struct ModeInfo {
 
 
 void handleClock(){
-  uint8_t h = 0;
-  uint8_t m = 0;
-  uint8_t s = 0;
-  if (syncClock.isSynced()) {
-    syncClock.getTime(h, m, s);
-  } else {
-    h = (millis() / 3600000UL) % 24;
-    m = (millis() / 60000UL) % 60;
-  }
-  drawTime(h, m, CRGB(0,255,0), CRGB(0,255,255));
+  drawTime(hour, minute, CRGB(0,255,0), CRGB(0,255,255));
 }
 void handleImage(){
   if (image_frame == nullptr) {
     fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
     return;
   }
-  for (int i = 0; i < NUM_LEDS; i++) {
-    uint8_t px = image_frame[i];
-    leds[i] = CRGB(px, px, px);
-  }
+  drawImage(0,0,M_WIDTH,M_HEIGHT,image_frame);
 }
 void handleAnimation(){
-  if (is_generated_animation) {
-    if (animationTimer.check()) {
-      playAnimation();
-    }
-    return;
-  }
-  if (animation_frames == nullptr || frames_count <= 0) {
-    fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
-    return;
-  }
-  if (animationTimer.check()) {
-    playAnimation();
-  }
+  playAnimation();
 }
 void handleWeather(){
     fill_solid(leds, NUM_LEDS, CRGB(0,0,255));
@@ -376,11 +386,8 @@ void setGeneratedAnimation(int8_t animation_id){
   } else {
     animationFunc = nullptr;
   }
-  animationTimer.start((uint32_t)max(animation_delay_ms, 30), millis(), true);
 }
 
-void parseAndSetTime(const String& response);
-void syncTimeFromInternet();
 
 void setImage(uint8_t* frame){
   if (image_frame!=nullptr){
@@ -457,7 +464,7 @@ void loadAnimation(int8_t animation_id){
     uint32_t num=0;
     uint8_t* frames=nullptr;
     readBytes("/anim", frames, num);
-    if (frames != nullptr && num >= NUM_LEDS) {
+    if (frames != nullptr) {
       setFramedAnimation(frames, num / NUM_LEDS);
     }
   }
@@ -469,7 +476,8 @@ void loadImage(){
       image_frame = nullptr;
     }
     uint8_t* frame=nullptr;
-    readBytes("/image", frame);
+    uint32_t num=0;
+    readBytes("/image", frame, num);
     setImage(frame);
 }
 
@@ -616,26 +624,28 @@ String fetch(const String& url,
     return response;
 }
 
-void parseAndSetTime(const String& response) {
-  DynamicJsonDocument doc(1024);
-  DeserializationError err = deserializeJson(doc, response);
-  if (err) return;
-
-  String datetime = doc["datetime"] | "";
-  if (datetime.length() < 19) return;
-
-  uint8_t hh = (datetime.substring(11, 13)).toInt();
-  uint8_t mm = (datetime.substring(14, 16)).toInt();
-  uint8_t ss = (datetime.substring(17, 19)).toInt();
-  syncClock.setTime(hh, mm, ss);
-}
 
 void syncTimeFromInternet() {
-  String _ipInfo = fetch("http://ipinfo.io/json");
-  (void)_ipInfo;
-  String response = fetch("https://nordapi.ee/api/v1/time/current?timezone=Asia/Irkutsk");
-  if (response.length() > 0) {
-    parseAndSetTime(response);
+  String ipInfo = fetch("http://ipinfo.io/json");
+  if (ipInfo.length()>0){
+    JsonDocument docIpInfo;
+    deserializeJson(docIpInfo, ipInfo);
+    String timezone = docIpInfo["timezone"];
+    String response = fetch(String("https://nordapi.ee/api/v1/time/current?timezone=")+timezone);
+    if (response.length() > 0) {
+      JsonDocument doc;
+      deserializeJson(doc, response);
+      hour = doc["data"]["hour"];
+      minute = doc["data"]["minute"];
+      second = doc["data"]["second"];
+      syncClock.setTime(hour, minute, second);
+      Serial.print("Time synced ");
+      Serial.print(hour);
+      Serial.print(":");
+      Serial.print(minute);
+      Serial.print(":");
+      Serial.println(second);
+    }
   }
 }
 
@@ -896,10 +906,19 @@ void endpoint_not_found() {
 
 
 void processTime(){
-  
+  if (WiFi.status() == WL_CONNECTED && timeSyncTimer.check()) {
+    syncTimeFromInternet();
+  }
+}
+void processMatrix(){
+  if(animationTimer.check()){
+    processMode();
+    FastLED.show();
+  }
 }
 
 void setup_endpoints(){
+  Serial.println("setup_endpoints");
   server.on("/status", HTTP_GET, endpoint_status);
   server.on("/settings", HTTP_POST, endpoint_set_settings);
   server.on("/wifi", HTTP_POST, endpoint_set_wifi);
@@ -916,6 +935,7 @@ void setup_arduino(){
     pinMode(BTN_PREV_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(BTN_NEXT_PIN), onNextButtonInterrupt, FALLING);
     attachInterrupt(digitalPinToInterrupt(BTN_PREV_PIN), onPrevButtonInterrupt, FALLING);
+    Serial.println("setup_arduino");
 }
 
 void setup_littlefs(){
@@ -937,15 +957,16 @@ void setup_settings(){
 }
 
 void setup_matrix(){
+  Serial.println("setup_matrix");
   FastLED.addLeds<WS2812, M_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(settings.brightness);
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   FastLED.show();
-  animation_delay_ms = 120;
-  animationTimer.start(animation_delay_ms, millis(), true);
+  animationTimer.start(animation_delay_ms);
 }
 
 void setup_wifi(){
+  Serial.println("setup_wifi");
   WiFi.mode(WIFI_STA);
   wifiMulti.addAP(settings.wifi, settings.pass);
   Serial.println("Trying connect to saved WiFi...");
@@ -957,8 +978,8 @@ void setup_wifi(){
     ip = WiFi.localIP().toString();
     Serial.print("Client mode started, IP: ");
     Serial.println(ip);
-    syncTimeFromInternet();
-    timeSyncTimer.start(10UL * 60UL * 1000UL, millis(), true);
+
+    timeSyncTimer.start(10UL * 60UL * 1000UL);
   } else {
     Serial.println("WiFi connect failed, fallback to AP");
     start_ap_mode();
@@ -976,9 +997,7 @@ void setup() {
 
 void loop() {
   server.handleClient();
-  if (WiFi.status() == WL_CONNECTED && timeSyncTimer.check()) {
-    syncTimeFromInternet();
-  }
+  
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   if (nextButtonIrqFlag) {
     noInterrupts();
@@ -1001,6 +1020,5 @@ void loop() {
     }
   }
   processTime();
-  processMode();
-  FastLED.show();
+  processMatrix();
 }

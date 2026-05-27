@@ -2,30 +2,29 @@
 
 #include <stdint.h>
 
-#define M_PIN 13 // GPIO13 (D7) для esp8266
+#define M_PIN 5 // GPIO5 для ESP32
 #define M_WIDTH 16
 #define M_HEIGHT 16
 #define NUM_LEDS (M_WIDTH * M_HEIGHT)
-#define BTN_NEXT_PIN 12 // D6
-#define BTN_PREV_PIN 13 // D7
+#define BTN_NEXT_PIN 32 // GPIO32
+#define BTN_PREV_PIN 33 // GPIO33
 
 
 // Sketch -> Include Library -> Manage libraries
-// ESP8266WiFi
+// ESP32 WiFi
 // PubSubClient by Nich O'Leary
 // WifiEsp by bportaluri
 // Wifi by arduino
 #include <Arduino.h>
 
-#define FASTLED_ESP8266_RAW_PIN_ORDER
 #include <FastLED.h>
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiClient.h>
-#include <ESP8266WiFiMulti.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClientSecureBearSSL.h>
+#include <WiFiMulti.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h> // by Benoit Blanchon
-#include <ESP8266WebServer.h>
+#include <WebServer.h>
 #include <LittleFS.h>
 #include <memory>
 
@@ -42,7 +41,7 @@ uint16_t XY(uint8_t x, uint8_t y) {
 }
 
 
-ESP8266WebServer server(80);
+WebServer server(80);
 
 // Access Point mode
 String AP_NAME = "iot_matrix_";
@@ -55,7 +54,7 @@ char CLIENT_PASS[] = "24242424";
 String ip = "0.0.0.0";
 
 
-ESP8266WiFiMulti wifiMulti;
+WiFiMulti wifiMulti;
 
 struct Settings {
   char wifi[32] = "HomeWiFi";
@@ -238,7 +237,7 @@ void prevMode(){
   current_mode = (current_mode-1)%MODE_COUNT;
 }
 
-void ICACHE_RAM_ATTR onNextButtonInterrupt() {
+void IRAM_ATTR onNextButtonInterrupt() {
   uint32_t nowUs = micros();
   if (nowUs - nextButtonIrqUs > 30000UL) {
     nextButtonIrqUs = nowUs;
@@ -246,7 +245,7 @@ void ICACHE_RAM_ATTR onNextButtonInterrupt() {
   }
 }
 
-void ICACHE_RAM_ATTR onPrevButtonInterrupt() {
+void IRAM_ATTR onPrevButtonInterrupt() {
   uint32_t nowUs = micros();
   if (nowUs - prevButtonIrqUs > 30000UL) {
     prevButtonIrqUs = nowUs;
@@ -485,8 +484,8 @@ void loadImage(){
 
 // Выцепить последние два байта из MAC адреса ESP
 String mac_adress_id() {
-  const int mac_len = WL_MAC_ADDR_LENGTH;
-  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  const int mac_len = 6;
+  uint8_t mac[6];
 
   WiFi.softAPmacAddress(mac);
 
@@ -554,27 +553,17 @@ String fetch(const String& url,
              const String& contentType = "text/plain")
 {
     HTTPClient http;
-
     std::unique_ptr<WiFiClient> plainClient;
-    std::unique_ptr<BearSSL::WiFiClientSecure> secureClient;
-
-    WiFiClient* clientPtr = nullptr;
+    std::unique_ptr<WiFiClientSecure> secureClient;
 
     if (url.startsWith("https://"))
     {
-        secureClient.reset(new BearSSL::WiFiClientSecure);
+        secureClient.reset(new WiFiClientSecure());
         secureClient->setInsecure(); // для продакшена лучше сертификаты
-
-        clientPtr = secureClient.get();
-
         if (!http.begin(*secureClient, url))
             return "";
-    }
-    else
-    {
-        plainClient.reset(new WiFiClient);
-        clientPtr = plainClient.get();
-
+    } else {
+        plainClient.reset(new WiFiClient());
         if (!http.begin(*plainClient, url))
             return "";
     }

@@ -29,6 +29,29 @@
 #include <memory>
 
 
+//grass_block_side.png img.shape=(16, 16, 3)
+uint8_t grass_block_image[]={
+  0x44, 0x96, 0xb4, 0x44, 0x94, 0xb6, 0x44, 0x97, 0xb3, 0x44, 0xa2, 0xa6, 0x44, 0xa2, 0xa6, 0x44, 0x9a, 0xaf, 0x44, 0xaa, 0x9f, 0x44, 0x9d, 0xac, 0x44, 0x8e, 0xbe, 0x44, 0x94, 0xb6, 0x44, 0x9f, 0xaa, 0x44, 0xa1, 0xa7, 0x44, 0x9f, 0xa9, 0x44, 0xa7, 0xa1, 0x44, 0xbb, 0x90, 0x44, 0x9c, 0xad,
+  0x44, 0x95, 0xb5, 0x44, 0x9d, 0xac, 0x3f, 0x82, 0xb9, 0x3f, 0x89, 0xb0, 0x3f, 0x88, 0xb2, 0x11, 0x89, 0x59, 0x44, 0xa0, 0xa8, 0x44, 0xa6, 0xa2, 0x44, 0xaa, 0x9f, 0x3f, 0x7c, 0xc2, 0x3f, 0x7e, 0xbf, 0x44, 0x97, 0xb3, 0x44, 0xa7, 0xa1, 0x44, 0x9d, 0xac, 0x44, 0xa1, 0xa7, 0x44, 0x9e, 0xab,
+  0x3f, 0x80, 0xbc, 0x11, 0x89, 0x59, 0x3f, 0x77, 0xcb, 0x44, 0xa4, 0xa4, 0x44, 0x9f, 0xa9, 0x11, 0x89, 0x59, 0x44, 0x99, 0xb0, 0x11, 0x89, 0x59, 0x44, 0x96, 0xb4, 0x44, 0x8d, 0xbf, 0x3f, 0x7d, 0xc1, 0x3f, 0x7a, 0xc6, 0x11, 0x89, 0x59, 0x44, 0xb3, 0x97, 0x44, 0xa8, 0xa0, 0x11, 0x89, 0x59,
+  0x11, 0x89, 0x59, 0x00, 0x00, 0x6c, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x44, 0x98, 0xb1, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x44, 0xaa, 0x9f, 0x11, 0x89, 0x59, 0x44, 0x9c, 0xad, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79,
+  0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x80, 0xb9, 0x11, 0x89, 0x59, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x00, 0x00, 0x6c, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79,
+  0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9,
+  0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x00, 0x00, 0x87, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96,
+  0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x11, 0x89, 0x59, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96,
+  0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79,
+  0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96,
+  0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x13, 0x81, 0x96, 0x11, 0x89, 0x59, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x11, 0x89, 0x59, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x00, 0x00, 0x87, 0x12, 0x84, 0x79,
+  0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x00, 0x00, 0x6c, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59,
+  0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9,
+  0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x11, 0x69, 0x74, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x80, 0xb9, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96,
+  0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59, 0x12, 0x80, 0xb9, 0x12, 0x80, 0xb9, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96,
+  0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x80, 0xb9, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x00, 0x00, 0x87, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x12, 0x84, 0x79, 0x13, 0x81, 0x96, 0x13, 0x81, 0x96, 0x12, 0x84, 0x79, 0x11, 0x89, 0x59
+};
+
+
+typedef void (*FuncPtr)();
+
 CRGB leds[NUM_LEDS];
 
 // FastLED matrix mapping helpers
@@ -57,9 +80,9 @@ String ip = "0.0.0.0";
 WiFiMulti wifiMulti;
 
 struct Settings {
-  char wifi[32] = "HomeWiFi";
-  char pass[32] = "12345678";
-  int brightness = 80;
+  char wifi[32] = "NoHornyWifi";
+  char pass[32] = "24242424";
+  int brightness = 30;
   int min_brightness = 10;
   int max_brightness = 100;
   int sleep_delay = 10;
@@ -148,6 +171,112 @@ private:
 };
 
 
+// Атрибут размещения ISR в быстрой памяти (только для ESP)
+#if defined(ESP32) || defined(ESP8266)
+  #define DB_ISR_ATTR IRAM_ATTR
+#else
+  #define DB_ISR_ATTR
+#endif
+
+
+class DebounceButton {
+public:
+using FuncPtr = void(*)();
+
+    DebounceButton(uint8_t pin, uint32_t debounce_ms = 50, uint32_t hold_ms = 400)
+        : _pin(pin), _debounce_ms(debounce_ms), _hold_ms(hold_ms) {}
+
+    // Инициализация пина и прерывания
+    void setup(FuncPtr interruptHandler, bool pullup = true) {
+        _pullup = pullup;
+        pinMode(_pin, pullup ? INPUT_PULLUP : INPUT);
+        
+        attachInterrupt(digitalPinToInterrupt(_pin), interruptHandler, CHANGE);
+    }
+
+    void setDebounceTime(uint32_t debounce_ms){ _debounce_ms = debounce_ms; }
+    void setHoldTime(uint32_t hold_ms){ _hold_ms = hold_ms; }
+
+    void setOnClickListener(FuncPtr cb) { _click_cb = cb; }
+    void setOnHoldListener(FuncPtr cb)  { _hold_cb = cb;  }
+
+    // ОБЯЗАТЕЛЬНО вызывать в loop()
+    void update() {
+        // 1. Атомарное чтение состояния из ISR
+        bool changed = false;
+        bool is_pressed = false;
+        uint32_t last_stable_change = 0;
+        uint32_t now = millis();
+
+        noInterrupts();
+        verify_change(now);
+        if (_need_to_handle) {
+            _need_to_handle = false;
+            changed = true;
+            is_pressed = _last_stable_change_state;
+            last_stable_change = _last_stable_change;
+        }
+        interrupts();
+
+        // 2. Обработка смены состояния (нажатие/отпускание)
+        if (changed) {
+            if (is_pressed) {
+                // Кнопка стабильно нажата
+                _start_press_time = last_stable_change;
+                _hold_triggered = false;
+            } else {
+                // Кнопка стабильно отпущена
+                if (!_hold_triggered && _click_cb) {
+                    _click_cb(); // Клик только если не было удержания
+                }
+            }
+        }
+
+        // 3. Детекция удержания (проверяется каждый вызов update)
+        
+        if (_last_stable_change_state && !_hold_triggered) {
+            if (now - _start_press_time >= _hold_ms) {
+                _hold_triggered = true;
+                if (_hold_cb) _hold_cb();
+            }
+        }
+    }
+
+    void verify_change(uint32_t now){
+      if (_last_stable_change!=_last_change && now-_last_change>_debounce_ms){
+          _last_stable_change = _last_change;
+          _last_stable_change_state = _last_change_state;
+          _need_to_handle = true;
+        }
+    }
+    
+    void handleISR() {
+        uint32_t now = millis();
+        verify_change(now);
+        _last_change = now;
+        _last_change_state = _pullup != digitalRead(_pin);
+    }
+
+private:
+    uint8_t _pin;
+    uint32_t _debounce_ms;
+    uint32_t _hold_ms;
+    bool _pullup = true;
+    FuncPtr _click_cb = nullptr;
+    FuncPtr _hold_cb  = nullptr;
+
+    // Volatile-флаги (меняются в ISR, читаются в update)
+    volatile uint32_t _last_change = 0; //last interrupt
+    volatile uint32_t _last_stable_change = 0; // last state change
+    volatile bool _last_stable_change_state = false;
+    volatile bool _last_change_state = false;
+    volatile bool _need_to_handle = false;
+
+    // Локальное состояние (обрабатывается только в update/main)
+    uint32_t _start_press_time = 0;
+    bool _hold_triggered = false;
+};
+
 
 
 SyncClock syncClock;
@@ -158,17 +287,14 @@ uint8_t second=0;
 
 Timer animationTimer;
 Timer timeSyncTimer;
+Timer timeUpdateTimer;
 
-volatile bool nextButtonIrqFlag = false;
-volatile bool prevButtonIrqFlag = false;
-volatile uint32_t nextButtonIrqUs = 0;
-volatile uint32_t prevButtonIrqUs = 0;
+DebounceButton nextBtn(BTN_NEXT_PIN);
+DebounceButton prevBtn(BTN_PREV_PIN);
 
-uint32_t nextButtonHandledMs = 0;
-uint32_t prevButtonHandledMs = 0;
 
 //animation vars
-typedef void (*FuncPtr)();
+
 bool is_generated_animation=false;
 uint16_t animation_delay_ms = 100;
 int32_t current_frame=0;
@@ -197,19 +323,23 @@ struct ModeInfo {
 
 
 void handleClock(){
-  drawTime(hour, minute, CRGB(0,255,0), CRGB(0,255,255));
+  // Serial.println("handleClock");
+  drawTime(hour, minute, CRGB(100,100,100), CRGB(0,255,255));
 }
 void handleImage(){
-  if (image_frame == nullptr) {
-    fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
-    return;
+  // Serial.println("handleImage");
+  if (image_frame != nullptr) {
+    drawImage(0,0,M_WIDTH,M_HEIGHT,image_frame);
   }
-  drawImage(0,0,M_WIDTH,M_HEIGHT,image_frame);
+  else fill_solid(leds, NUM_LEDS, CRGB(0,255,0));
 }
 void handleAnimation(){
+  // Serial.println("handleAnimation");
   playAnimation();
+    // fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
 }
 void handleWeather(){
+    // Serial.println("handleWeather");
     fill_solid(leds, NUM_LEDS, CRGB(0,0,255));
 }
 
@@ -237,20 +367,17 @@ void prevMode(){
   current_mode = (current_mode-1)%MODE_COUNT;
 }
 
-void IRAM_ATTR onNextButtonInterrupt() {
-  uint32_t nowUs = micros();
-  if (nowUs - nextButtonIrqUs > 30000UL) {
-    nextButtonIrqUs = nowUs;
-    nextButtonIrqFlag = true;
-  }
+DB_ISR_ATTR void nextButtonInterrupt(){ nextBtn.handleISR(); }
+DB_ISR_ATTR void prevButtonInterrupt(){ prevBtn.handleISR(); }
+
+void onClickNextBtn(){
+  Serial.println("nextMode");
+  nextMode();
 }
 
-void IRAM_ATTR onPrevButtonInterrupt() {
-  uint32_t nowUs = micros();
-  if (nowUs - prevButtonIrqUs > 30000UL) {
-    prevButtonIrqUs = nowUs;
-    prevButtonIrqFlag = true;
-  }
+void onClickPrevBtn(){
+  Serial.println("prevMode");
+  prevMode();
 }
 
 // mRGB compatibility macro for legacy code
@@ -258,8 +385,7 @@ void IRAM_ATTR onPrevButtonInterrupt() {
 
 const FuncPtr animation_id_to_func[] = {
   []() {
-    static uint8_t hue = 0;
-    hue += 2;
+    uint8_t hue = current_frame;
     for (uint8_t y = 0; y < M_HEIGHT; y++) {
       for (uint8_t x = 0; x < M_WIDTH; x++) {
         leds[XY(x, y)] = CHSV(hue + (x + y) * 8, 255, 255);
@@ -271,17 +397,15 @@ const FuncPtr animation_id_to_func[] = {
     leds[random16(NUM_LEDS)] += CHSV(random8(), 200, 255);
   },
   []() {
-    static uint16_t t = 0;
-    t += 20;
     for (uint8_t y = 0; y < M_HEIGHT; y++) {
       for (uint8_t x = 0; x < M_WIDTH; x++) {
-        uint8_t v = inoise8(x * 32, y * 32, t);
+        uint8_t v = inoise8(x * 32, y * 32, current_frame);
         leds[XY(x, y)] = CHSV(map(v, 0, 255, 0, 40), 255, v);
       }
     }
   },
   []() {
-    static uint8_t pos = 0;
+    uint8_t pos = current_frame;
     fill_solid(leds, NUM_LEDS, CRGB::Black);
     leds[XY(pos % M_WIDTH, pos / M_WIDTH)] = CRGB::White;
     pos = (pos + 1) % NUM_LEDS;
@@ -330,10 +454,10 @@ void drawTime(int8_t hours, int8_t minutes, CRGB digitColor, CRGB semicolonColor
 
 
 void drawImage(int x, int y, int width, int height, uint8_t* image){
-  for (int i=0; i<height; i++){
-    for (int j=0; j<width; j++){
-      int index = (i*width+j)*3;
-      leds[XY(x+j, y+i)] = CRGB(image[index], image[index+1], image[index+2]);
+  for (uint16_t i=0; i<height; i++){
+    for (uint16_t j=0; j<width; j++){
+      uint32_t index = (i*width+j)*3;
+      leds[XY(x+j, y+i)] = CHSV(image[index], image[index+1], image[index+2]);
     }
   }
 }
@@ -349,12 +473,10 @@ void playAnimation(){
       animationFunc();
     }
   }else{
-    int32_t frame_offset = current_frame * NUM_LEDS;
-    for (int i = 0; i < NUM_LEDS; i++) {
-      uint8_t px = animation_frames[frame_offset + i];
-      leds[i] = CRGB(px, px, px);
+    if (animation_frames != nullptr){
+      drawAnimationFrame(0,0,M_WIDTH,M_HEIGHT,current_frame,animation_frames);
+      current_frame=(current_frame+1)%frames_count;
     }
-    current_frame=(current_frame+1)%frames_count;
   }
 }
 
@@ -626,7 +748,7 @@ void syncTimeFromInternet() {
       deserializeJson(doc, response);
       hour = doc["data"]["hour"];
       minute = doc["data"]["minute"];
-      second = doc["data"]["second"];
+      second = doc["data"]["seconds"];
       syncClock.setTime(hour, minute, second);
       Serial.print("Time synced ");
       Serial.print(hour);
@@ -698,12 +820,6 @@ bool readBytes(const char* filename, uint8_t*& data, uint32_t& len)
     }
 
     return true;
-}
-
-bool readBytes(const char* filename, uint8_t*& data)
-{
-    uint32_t len = 0;
-    return readBytes(filename, data, len);
 }
 
 
@@ -898,12 +1014,21 @@ void processTime(){
   if (WiFi.status() == WL_CONNECTED && timeSyncTimer.check()) {
     syncTimeFromInternet();
   }
+  if(timeUpdateTimer.check())syncClock.getTime(hour, minute, second);
 }
 void processMatrix(){
   if(animationTimer.check()){
+    // Serial.println("processMatrix after timer");
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+
     processMode();
     FastLED.show();
   }
+}
+
+void processButtons(){
+  nextBtn.update();
+  prevBtn.update();
 }
 
 void setup_endpoints(){
@@ -922,8 +1047,15 @@ void setup_arduino(){
     Serial.begin(115200);
     pinMode(BTN_NEXT_PIN, INPUT_PULLUP);
     pinMode(BTN_PREV_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(BTN_NEXT_PIN), onNextButtonInterrupt, FALLING);
-    attachInterrupt(digitalPinToInterrupt(BTN_PREV_PIN), onPrevButtonInterrupt, FALLING);
+    animationTimer.start(animation_delay_ms);
+    timeUpdateTimer.start(1000);
+
+    nextBtn.setup(nextButtonInterrupt);
+    nextBtn.setOnClickListener(onClickNextBtn);
+
+    prevBtn.setup(prevButtonInterrupt);
+    prevBtn.setOnClickListener(onClickPrevBtn);
+
     Serial.println("setup_arduino");
 }
 
@@ -947,11 +1079,13 @@ void setup_settings(){
 
 void setup_matrix(){
   Serial.println("setup_matrix");
-  FastLED.addLeds<WS2812, M_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.addLeds<WS2812B, M_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(settings.brightness);
+  // FastLED.setCorrection(TypicalLEDStrip);
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   FastLED.show();
-  animationTimer.start(animation_delay_ms);
+  setGeneratedAnimation(0);
+  setImage(grass_block_image);
 }
 
 void setup_wifi(){
@@ -987,27 +1121,14 @@ void setup() {
 void loop() {
   server.handleClient();
   
-  fill_solid(leds, NUM_LEDS, CRGB::Black);
-  if (nextButtonIrqFlag) {
-    noInterrupts();
-    nextButtonIrqFlag = false;
-    interrupts();
-    uint32_t nowMs = millis();
-    if (nowMs - nextButtonHandledMs > 80 && digitalRead(BTN_NEXT_PIN) == LOW) {
-      nextButtonHandledMs = nowMs;
-      nextMode();
-    }
-  }
-  if (prevButtonIrqFlag) {
-    noInterrupts();
-    prevButtonIrqFlag = false;
-    interrupts();
-    uint32_t nowMs = millis();
-    if (nowMs - prevButtonHandledMs > 80 && digitalRead(BTN_PREV_PIN) == LOW) {
-      prevButtonHandledMs = nowMs;
-      prevMode();
-    }
-  }
+  // leds[0] = CRGB::Red;
+  // Serial.println("Modes info");
+  // Serial.println(current_mode);
+  // Serial.println(MODE_COUNT);
+  // Serial.println(modeToString(1));
+
+  processButtons();
   processTime();
   processMatrix();
+  delay(100);
 }

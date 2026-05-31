@@ -531,18 +531,6 @@ void playAnimation(){
   }
 }
 
-void setFramedAnimation(uint8_t* frames, int _frames_count){
-  if (animation_frames!=nullptr){
-    free(animation_frames);
-    animation_frames = nullptr;
-  }
-  is_generated_animation=false;
-  current_frame = 0;
-  frames_count = _frames_count;
-  animation_frames = frames;
-  settings.animation_id = -1;
-}
-
 
 void setGeneratedAnimation(int8_t animation_id){
   if (animation_frames!=nullptr){
@@ -560,13 +548,39 @@ void setGeneratedAnimation(int8_t animation_id){
   }
 }
 
-
 void setImage(uint8_t* frame){
-  if (image_frame!=nullptr){
+  if (image_frame != nullptr){
     free(image_frame);
     image_frame = nullptr;
   }
-  image_frame = frame;
+  if (frame != nullptr) {
+    image_frame = (uint8_t*)malloc(NUM_LEDS * 3);
+    if (image_frame != nullptr) {
+      memcpy(image_frame, frame, NUM_LEDS * 3);
+    } else {
+      Serial.println("setImage: malloc failed!");
+    }
+  }
+}
+
+void setFramedAnimation(uint8_t* frames, int _frames_count){
+  if (animation_frames != nullptr){
+    free(animation_frames);
+    animation_frames = nullptr;
+  }
+  if (frames != nullptr && _frames_count > 0) {
+    uint32_t total = (uint32_t)_frames_count * NUM_LEDS * 3;
+    animation_frames = (uint8_t*)malloc(total);
+    if (animation_frames != nullptr) {
+      memcpy(animation_frames, frames, total);
+    } else {
+      Serial.println("setFramedAnimation: malloc failed!");
+    }
+  }
+  is_generated_animation = false;
+  current_frame = 0;
+  frames_count = _frames_count;
+  settings.animation_id = -1;
 }
 
 //settings
@@ -596,8 +610,8 @@ bool saveSettings() {
 
 bool loadSettings() {
     if (!LittleFS.exists("/config.json")) {
-        Serial.println("Config file not found");
-        return false;
+      Serial.println("Config file not found (first run?) — using defaults");
+      return false;
     }
     File file = LittleFS.open("/config.json", "r");
     if (!file) {
@@ -624,15 +638,17 @@ bool loadSettings() {
     settings.mode = doc["mode"] | settings.mode;
     settings.mode = constrain(settings.mode, 0, (int)MODE_COUNT - 1);
     current_mode = (uint8_t)settings.mode;
-    settings.hour = (uint8_t)settings.hour;
-    settings.minute = (uint8_t)settings.minute;
+    settings.hour = (uint8_t)doc["hour"];
+    settings.minute = (uint8_t)doc["minute"];
     loadAnimation(settings.animation_id);
     loadImage();
+    syncClock.setTime(settings.hour, settings.minute, settings.second);
 
-
-    Serial.println("Settings:");
+    Serial.print("Loaded mode: ");
     Serial.println(current_mode);
-    Serial.println(settings.hour);
+    Serial.print("Loaded time: ");
+    Serial.print(settings.hour);
+    Serial.print(":");
     Serial.println(settings.minute);
 
 
@@ -906,13 +922,38 @@ void syncTimeFromInternet() {
     JsonDocument docIpInfo;
     deserializeJson(docIpInfo, ipInfo);
     String timezone = docIpInfo["timezone"];
-    String response = fetch(String("https://nordapi.ee/api/v1/time/current?timezone=")+timezone);
+    String response = fetch(String("https://timeapi.io/api/v1/time/current/zone?timezone=")+timezone);
     if (response.length() > 0) {
       JsonDocument doc;
-      deserializeJson(doc, response);
-      settings.hour = (uint8_t) doc["data"]["hour"];
-      settings.minute = (uint8_t) doc["data"]["minute"];
-      settings.second = (uint8_t) doc["data"]["seconds"];
+      DeserializationError err = deserializeJson(doc, response);
+    if (err) {
+      Serial.print("Time API JSON parse error: ");
+      Serial.println(err.c_str());
+      return;
+    }
+    
+    // Parse "time" field: "HH:MM:SS.microseconds"
+    String timeStr = doc["time"] | "";
+    if (timeStr.length() < 8) {
+      Serial.println("Invalid time format from API");
+      return;
+    }
+  
+      // Extract HH:MM:SS using substring and convert to numbers
+      int h = timeStr.substring(0, 2).toInt();
+      int m = timeStr.substring(3, 5).toInt();
+      int s = timeStr.substring(6, 8).toInt();
+
+      // Validate parsed values
+      if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) {
+        Serial.println("Parsed time values out of range");
+        return;
+      }
+      
+      // Update settings and clock
+      settings.hour = (uint8_t)h;
+      settings.minute = (uint8_t)m;
+      settings.second = (uint8_t)s;
       syncClock.setTime(settings.hour, settings.minute, settings.second);
       Serial.print("Time synced ");
       Serial.print(settings.hour);
@@ -1048,17 +1089,26 @@ void endpoint_root() {
 }
 
 void endpoint_status() {
-  const char* mode = modeToString(current_mode);
+  const char* mode_name = modeToString(current_mode);
 
-  StaticJsonDocument<400> doc;
-  doc["mode"] = mode;
+  StaticJsonDocument<512> doc;
+  
+  doc["mode"] = mode_name;
+  doc["mode_id"] = current_mode;
   doc["brightness"] = settings.brightness;
   doc["min_brightness"] = settings.min_brightness;
   doc["max_brightness"] = settings.max_brightness;
   doc["sleep_delay"] = settings.sleep_delay;
+  doc["animation_id"] = settings.animation_id;
+  doc["hour"] = settings.hour;       
+  doc["minute"] = settings.minute;   
+  doc["second"] = settings.second;   
   doc["ip"] = ip;
   doc["weather_valid"] = weather_valid;
   doc["weather_temp_c"] = weather_temp_c;
+  doc["weather_lat"] = weather_lat;
+  doc["weather_lon"] = weather_lon;
+  
   String out;
   serializeJson(doc, out);
   server.send(200, "application/json", out);
@@ -1270,15 +1320,20 @@ void setup_arduino(){
 }
 
 void setup_littlefs(){
-    // mount filesystem
-    if (!LittleFS.begin(false)) {
-        Serial.println("LittleFS mount failed, trying format");
-        if (!LittleFS.begin(true)) {
-          Serial.println("LittleFS format+mount failed");
-          return;
-        }
+  if (!LittleFS.begin(false)) {
+    Serial.println("LittleFS mount failed, trying format...");
+    if (!LittleFS.begin(true)) {
+      Serial.println("LittleFS format+mount FAILED! Halting.");
+      // Критическая ошибка — нельзя продолжать работу
+      while (true) {
+        delay(1000);
+        Serial.println("LittleFS unavailable. Restarting in 5s...");
+        delay(5000);
+        ESP.restart();
+      }
     }
-    Serial.println("LittleFS mounted");
+  }
+  Serial.println("LittleFS mounted successfully");
 }
 
 

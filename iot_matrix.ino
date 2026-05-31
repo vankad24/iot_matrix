@@ -87,10 +87,21 @@ struct Settings {
   int max_brightness = 100;
   int sleep_delay = 10;
   int animation_id = 0;
+  int mode = 0;
 } settings;
 
 
 
+
+constexpr uint8_t HTTP_METHOD_GET = 0;
+constexpr uint8_t HTTP_METHOD_POST = 1;
+constexpr uint8_t HTTP_METHOD_PUT = 2;
+constexpr uint8_t HTTP_METHOD_DELETE = 3;
+
+String fetch(const String& url,
+             uint8_t method = HTTP_METHOD_GET,
+             const String& body = "",
+             const String& contentType = "text/plain");
 
 class Timer {
 public:
@@ -283,11 +294,17 @@ SyncClock syncClock;
 uint8_t hour=0;
 uint8_t minute=0;
 uint8_t second=0;
+int8_t weather_temp_c = 0;
+bool weather_valid = false;
+float weather_lat = 0.0f;
+float weather_lon = 0.0f;
+bool weather_location_ready = false;
 
 
 Timer animationTimer;
 Timer timeSyncTimer;
 Timer timeUpdateTimer;
+Timer weatherSyncTimer;
 
 DebounceButton nextBtn(BTN_NEXT_PIN);
 DebounceButton prevBtn(BTN_PREV_PIN);
@@ -339,8 +356,7 @@ void handleAnimation(){
     // fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
 }
 void handleWeather(){
-    // Serial.println("handleWeather");
-    fill_solid(leds, NUM_LEDS, CRGB(0,0,255));
+    drawWeather(weather_temp_c, weather_valid, CRGB(255, 120, 0));
 }
 
 static const ModeInfo modes[] = {
@@ -359,12 +375,14 @@ void processMode(){
 }
 void setMode(uint8_t mode){
   current_mode = mode%MODE_COUNT;
+  settings.mode = current_mode;
 }
 void nextMode(){
   current_mode = (current_mode+1)%MODE_COUNT;
 }
 void prevMode(){
-  current_mode = (current_mode-1)%MODE_COUNT;
+  current_mode = (current_mode + MODE_COUNT - 1) % MODE_COUNT;
+  settings.mode = current_mode;
 }
 
 DB_ISR_ATTR void nextButtonInterrupt(){ nextBtn.handleISR(); }
@@ -452,6 +470,40 @@ void drawTime(int8_t hours, int8_t minutes, CRGB digitColor, CRGB semicolonColor
   leds[XY(7,8)] = semicolonColor;
 }
 
+void drawMinus(int x, int y, CRGB color){
+  leds[XY(x + 0, y)] = color;
+  leds[XY(x + 1, y)] = color;
+  leds[XY(x + 2, y)] = color;
+}
+
+void drawWeather(int8_t tempC, bool isValid, CRGB color){
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  if (!isValid) {
+    leds[XY(7, 7)] = CRGB::Blue;
+    leds[XY(8, 7)] = CRGB::Blue;
+    leds[XY(7, 8)] = CRGB::Blue;
+    leds[XY(8, 8)] = CRGB::Blue;
+    return;
+  }
+
+  int value = tempC;
+  bool isNegative = value < 0;
+  if (value < 0) value = -value;
+  if (value > 99) value = 99;
+  int tens = value / 10;
+  int ones = value % 10;
+
+  if (isNegative) {
+    drawMinus(0, 7, color);
+  } else {
+    leds[XY(1, 6)] = color;
+    leds[XY(1, 8)] = color;
+  }
+
+  drawDigit(4, 5, color, tens);
+  drawDigit(8, 5, color, ones);
+}
+
 
 void drawImage(int x, int y, int width, int height, uint8_t* image){
   for (uint16_t i=0; i<height; i++){
@@ -518,6 +570,77 @@ void setImage(uint8_t* frame){
   image_frame = frame;
 }
 
+bool detectWeatherLocation() {
+  String geoResponse = fetch("https://ipwho.is/");
+  if (geoResponse.length() == 0) {
+    return false;
+  }
+
+  StaticJsonDocument<512> geoDoc;
+  DeserializationError geoErr = deserializeJson(geoDoc, geoResponse);
+  if (geoErr) {
+    Serial.print("Weather geo JSON parse error: ");
+    Serial.println(geoErr.c_str());
+    return false;
+  }
+
+  bool success = geoDoc["success"] | false;
+  if (!success) {
+    return false;
+  }
+
+  weather_lat = geoDoc["latitude"] | 0.0f;
+  weather_lon = geoDoc["longitude"] | 0.0f;
+  weather_location_ready = true;
+  Serial.print("Weather location ready: ");
+  Serial.print(weather_lat, 4);
+  Serial.print(", ");
+  Serial.println(weather_lon, 4);
+  return true;
+}
+
+bool syncWeatherFromInternet() {
+  if (WiFi.status() != WL_CONNECTED) {
+    weather_valid = false;
+    return false;
+  }
+  if (!weather_location_ready && !detectWeatherLocation()) {
+    weather_valid = false;
+    return false;
+  }
+
+  String weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" +
+                      String(weather_lat, 6) +
+                      "&longitude=" + String(weather_lon, 6) +
+                      "&current=temperature_2m&timezone=auto";
+  String weatherResponse = fetch(weatherUrl);
+  if (weatherResponse.length() == 0) {
+    weather_valid = false;
+    return false;
+  }
+
+  DynamicJsonDocument weatherDoc(2048);
+  DeserializationError weatherErr = deserializeJson(weatherDoc, weatherResponse);
+  if (weatherErr) {
+    Serial.print("Weather JSON parse error: ");
+    Serial.println(weatherErr.c_str());
+    weather_valid = false;
+    return false;
+  }
+
+  if (!weatherDoc["current"].containsKey("temperature_2m")) {
+    weather_valid = false;
+    return false;
+  }
+
+  float temp = weatherDoc["current"]["temperature_2m"] | 0.0f;
+  weather_temp_c = (int8_t)roundf(temp);
+  weather_valid = true;
+  Serial.print("Weather synced, temp C: ");
+  Serial.println(weather_temp_c);
+  return true;
+}
+
 //settings
 bool saveSettings() {
     StaticJsonDocument<256> doc;
@@ -528,6 +651,7 @@ bool saveSettings() {
     doc["max_brightness"] = settings.max_brightness;
     doc["sleep_delay"] = settings.sleep_delay;
     doc["animation_id"] = settings.animation_id;
+    doc["mode"] = settings.mode;
 
     File file = LittleFS.open("/config.json", "w");
     if (!file) {
@@ -567,6 +691,9 @@ bool loadSettings() {
     settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
     settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
     settings.animation_id = doc["animation_id"] | settings.animation_id;
+    settings.mode = doc["mode"] | settings.mode;
+    settings.mode = constrain(settings.mode, 0, (int)MODE_COUNT - 1);
+    current_mode = (uint8_t)settings.mode;
     loadAnimation(settings.animation_id);
     loadImage();
 
@@ -599,7 +726,14 @@ void loadImage(){
     uint8_t* frame=nullptr;
     uint32_t num=0;
     readBytes("/image", frame, num);
-    setImage(frame);
+    if (frame != nullptr && num == NUM_LEDS * 3) {
+      setImage(frame);
+    } else {
+      if (frame != nullptr) {
+        free(frame);
+      }
+      image_frame = nullptr;
+    }
 }
 
 // acess point / wifi
@@ -660,19 +794,10 @@ void start_client_mode(){
 
 //internet access
 
-enum class Method
-{
-    GET,
-    POST,
-    PUT,
-    DELETE
-};
-
-
 String fetch(const String& url,
-             Method method = Method::GET,
-             const String& body = "",
-             const String& contentType = "text/plain")
+             uint8_t method,
+             const String& body,
+             const String& contentType)
 {
     HTTPClient http;
     std::unique_ptr<WiFiClient> plainClient;
@@ -697,19 +822,19 @@ String fetch(const String& url,
 
     switch (method)
     {
-        case Method::GET:
+        case HTTP_METHOD_GET:
             code = http.GET();
             break;
 
-        case Method::POST:
+        case HTTP_METHOD_POST:
             code = http.POST(body);
             break;
 
-        case Method::PUT:
+        case HTTP_METHOD_PUT:
             code = http.sendRequest("PUT", body);
             break;
 
-        case Method::DELETE:
+        case HTTP_METHOD_DELETE:
             code = http.sendRequest("DELETE", body);
             break;
     }
@@ -879,15 +1004,17 @@ bool readStruct(const char* filename, T& data)
 //endpoints
 
 void endpoint_status() {
-  const char* mode = "clock";
-  if (modes[current_mode].mode == Mode::Image) mode = "image";
-  if (modes[current_mode].mode == Mode::Animation) mode = "animation";
-  if (modes[current_mode].mode == Mode::Weather) mode = "weather";
+  const char* mode = modeToString(current_mode);
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<384> doc;
   doc["mode"] = mode;
   doc["brightness"] = settings.brightness;
+  doc["min_brightness"] = settings.min_brightness;
+  doc["max_brightness"] = settings.max_brightness;
+  doc["sleep_delay"] = settings.sleep_delay;
   doc["ip"] = ip;
+  doc["weather_valid"] = weather_valid;
+  doc["weather_temp_c"] = weather_temp_c;
   String out;
   serializeJson(doc, out);
   server.send(200, "application/json", out);
@@ -917,20 +1044,33 @@ void endpoint_set_mode() {
   }
 
   saveSettings();
-  server.send(200, "application/json", "{}\n");
+  endpoint_status();
 }
 
 void endpoint_set_settings() {
   StaticJsonDocument<128> doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
-  settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
-  settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
+  int minBr = doc["min_brightness"] | settings.min_brightness;
+  int maxBr = doc["max_brightness"] | settings.max_brightness;
+  minBr = constrain(minBr, 1, 255);
+  maxBr = constrain(maxBr, 1, 255);
+  if (minBr > maxBr) {
+    int t = minBr;
+    minBr = maxBr;
+    maxBr = t;
+  }
+  settings.min_brightness = minBr;
+  settings.max_brightness = maxBr;
   settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
-  settings.brightness = settings.max_brightness;
+  settings.sleep_delay = constrain(settings.sleep_delay, 1, 3600);
+  settings.brightness = constrain(settings.brightness, settings.min_brightness, settings.max_brightness);
+  if (doc.containsKey("brightness")) {
+    settings.brightness = constrain((int)(doc["brightness"] | settings.brightness), settings.min_brightness, settings.max_brightness);
+  }
   FastLED.setBrightness(settings.brightness);
   saveSettings();
-  server.send(200, "application/json", "{}\n");
+  endpoint_status();
 }
 
 void endpoint_set_wifi() {
@@ -939,6 +1079,10 @@ void endpoint_set_wifi() {
   if (err) { server.send(400, "application/json", "{}\n"); return; }
   strlcpy(settings.wifi, doc["ssid"] | settings.wifi, sizeof(settings.wifi));
   strlcpy(settings.pass, doc["password"] | settings.pass, sizeof(settings.pass));
+  if (strlen(settings.wifi) == 0) {
+    server.send(400, "application/json", "{\"error\":\"ssid required\"}\n");
+    return;
+  }
   saveSettings();
   server.send(200, "application/json", "{}\n");
   ESP.restart();
@@ -951,7 +1095,7 @@ void endpoint_set_image() {
   JsonArray arr = doc["data"].as<JsonArray>();
   if (arr.size() != NUM_LEDS) { server.send(400, "application/json", "{}\n"); return; }
 
-  uint8_t* frame = (uint8_t*)malloc(NUM_LEDS);
+  uint8_t* frame = (uint8_t*)malloc(NUM_LEDS * 3);
   if (frame == nullptr) {
     server.send(500, "application/json", "{}\n");
     return;
@@ -960,13 +1104,21 @@ void endpoint_set_image() {
     int value = arr[i] | 0;
     if (value < 0) value = 0;
     if (value > 255) value = 255;
-    frame[i] = (uint8_t)value;
+    uint8_t px = (uint8_t)value;
+    frame[i * 3 + 0] = px;
+    frame[i * 3 + 1] = px;
+    frame[i * 3 + 2] = px;
   }
 
-  saveBytes("/image", frame, NUM_LEDS);
+  if (!saveBytes("/image", frame, NUM_LEDS * 3)) {
+    free(frame);
+    server.send(500, "application/json", "{\"error\":\"failed to save image\"}\n");
+    return;
+  }
   setImage(frame);
   setMode(Mode::Image);
-  server.send(200, "application/json", "{}\n");
+  saveSettings();
+  endpoint_status();
 }
 
 void endpoint_set_animation() {
@@ -999,10 +1151,15 @@ void endpoint_set_animation() {
     }
   }
 
-  saveBytes("/anim", buffer, total);
+  if (!saveBytes("/anim", buffer, total)) {
+    free(buffer);
+    server.send(500, "application/json", "{\"error\":\"failed to save animation\"}\n");
+    return;
+  }
   setFramedAnimation(buffer, frames);
   setMode(Mode::Animation);
-  server.send(200, "application/json", "{}\n");
+  saveSettings();
+  endpoint_status();
 }
 
 void endpoint_not_found() {
@@ -1016,6 +1173,13 @@ void processTime(){
   }
   if(timeUpdateTimer.check())syncClock.getTime(hour, minute, second);
 }
+
+void processWeather(){
+  if (WiFi.status() == WL_CONNECTED && weatherSyncTimer.check()) {
+    syncWeatherFromInternet();
+  }
+}
+
 void processMatrix(){
   if(animationTimer.check()){
     // Serial.println("processMatrix after timer");
@@ -1061,9 +1225,12 @@ void setup_arduino(){
 
 void setup_littlefs(){
     // mount filesystem
-    if (!LittleFS.begin()) {
-        Serial.println("LittleFS mount failed");
-        return;
+    if (!LittleFS.begin(false)) {
+        Serial.println("LittleFS mount failed, trying format");
+        if (!LittleFS.begin(true)) {
+          Serial.println("LittleFS format+mount failed");
+          return;
+        }
     }
     Serial.println("LittleFS mounted");
 }
@@ -1103,6 +1270,9 @@ void setup_wifi(){
     Serial.println(ip);
 
     timeSyncTimer.start(10UL * 60UL * 1000UL);
+    weatherSyncTimer.start(15UL * 60UL * 1000UL);
+    syncTimeFromInternet();
+    syncWeatherFromInternet();
   } else {
     Serial.println("WiFi connect failed, fallback to AP");
     start_ap_mode();
@@ -1129,6 +1299,7 @@ void loop() {
 
   processButtons();
   processTime();
+  processWeather();
   processMatrix();
   delay(100);
 }

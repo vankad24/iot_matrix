@@ -88,6 +88,9 @@ struct Settings {
   int sleep_delay = 10;
   int animation_id = 0;
   int mode = 0;
+  uint8_t hour=0;
+  uint8_t minute=0;
+  uint8_t second=0;
 } settings;
 
 
@@ -291,9 +294,6 @@ private:
 
 
 SyncClock syncClock;
-uint8_t hour=0;
-uint8_t minute=0;
-uint8_t second=0;
 int8_t weather_temp_c = 0;
 bool weather_valid = false;
 float weather_lat = 0.0f;
@@ -342,7 +342,7 @@ struct ModeInfo {
 
 void handleClock(){
   // Serial.println("handleClock");
-  drawTime(hour, minute, CRGB(100,100,100), CRGB(0,255,255));
+  drawTime(settings.hour, settings.minute, CRGB(100,100,100), CRGB(0,255,255));
 }
 void handleImage(){
   // Serial.println("handleImage");
@@ -445,9 +445,7 @@ const int16_t digitCodes[] = {
 };
 
 
-
 // ----------- functions -----------
-
 
 // draw
 void drawDigit(int x, int y, CRGB color, int8_t digit){
@@ -571,6 +569,247 @@ void setImage(uint8_t* frame){
   image_frame = frame;
 }
 
+//settings
+bool saveSettings() {
+    StaticJsonDocument<256> doc;
+    doc["wifi"] = settings.wifi;
+    doc["pass"] = settings.pass;
+    doc["brightness"] = settings.brightness;
+    doc["min_brightness"] = settings.min_brightness;
+    doc["max_brightness"] = settings.max_brightness;
+    doc["sleep_delay"] = settings.sleep_delay;
+    doc["animation_id"] = settings.animation_id;
+    doc["mode"] = settings.mode;
+    doc["hour"] = settings.hour;
+    doc["minute"] = settings.minute;
+
+    File file = LittleFS.open("/config.json", "w");
+    if (!file) {
+        Serial.println("Failed to open file for writing");
+        return false;
+    }
+    serializeJsonPretty(doc, file);
+    file.close();
+    Serial.println("Settings saved");
+    return true;
+}
+
+bool loadSettings() {
+    if (!LittleFS.exists("/config.json")) {
+        Serial.println("Config file not found");
+        return false;
+    }
+    File file = LittleFS.open("/config.json", "r");
+    if (!file) {
+        Serial.println("Failed to open config file");
+        return false;
+    }
+    StaticJsonDocument<256> doc;
+    DeserializationError err =
+        deserializeJson(doc, file);
+    file.close();
+    if (err) {
+        Serial.print("JSON parse error: ");
+        Serial.println(err.c_str());
+        return false;
+    }
+
+    strlcpy(settings.wifi, doc["wifi"] | settings.wifi, sizeof(settings.wifi));
+    strlcpy(settings.pass, doc["pass"] | settings.pass, sizeof(settings.pass));
+    settings.brightness = doc["brightness"] | settings.brightness;
+    settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
+    settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
+    settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
+    settings.animation_id = doc["animation_id"] | settings.animation_id;
+    settings.mode = doc["mode"] | settings.mode;
+    settings.mode = constrain(settings.mode, 0, (int)MODE_COUNT - 1);
+    current_mode = (uint8_t)settings.mode;
+    settings.hour = (uint8_t)settings.hour;
+    settings.minute = (uint8_t)settings.minute;
+    loadAnimation(settings.animation_id);
+    loadImage();
+
+
+    Serial.println("Settings:");
+    Serial.println(current_mode);
+    Serial.println(settings.hour);
+    Serial.println(settings.minute);
+
+
+    Serial.println("Settings loaded");
+    return true;
+}
+
+void loadAnimation(int8_t animation_id){
+  if (animation_id>=0){
+    setGeneratedAnimation(animation_id);
+  }else{
+    if (animation_frames!=nullptr){
+      free(animation_frames);
+      animation_frames = nullptr;
+    }
+    uint32_t num=0;
+    uint8_t* frames=nullptr;
+    readBytes("/anim", frames, num);
+    if (frames != nullptr) {
+      setFramedAnimation(frames, num / NUM_LEDS);
+    }
+  }
+}
+
+void loadImage(){
+    if (image_frame!=nullptr){
+      free(image_frame);
+      image_frame = nullptr;
+    }
+    uint8_t* frame=nullptr;
+    uint32_t num=0;
+    readBytes("/image", frame, num);
+    if (frame != nullptr && num == NUM_LEDS * 3) {
+      setImage(frame);
+    } else {
+      if (frame != nullptr) {
+        free(frame);
+      }
+      image_frame = nullptr;
+    }
+}
+
+// acess point / wifi
+
+// Выцепить последние два байта из MAC адреса ESP
+String mac_adress_id() {
+  const int mac_len = 6;
+  uint8_t mac[6];
+
+  WiFi.softAPmacAddress(mac);
+
+  String mac_id = String(mac[mac_len - 2], HEX) +
+          String(mac[mac_len - 1], HEX);
+
+  return mac_id;
+}
+
+// Запуск точки доступа (access point)
+void start_ap_mode() {
+  IPAddress ap_IP(192, 168, 1, 1);
+  IPAddress subnet(255, 255, 255, 0);
+
+  String network_name = AP_NAME + mac_adress_id();
+  // String network_name = AP_NAME;
+
+  WiFi.disconnect();
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(ap_IP, ap_IP, subnet); // IP, Gateway, Subnet
+  WiFi.softAP(network_name.c_str(), AP_PASSWORD.c_str());
+
+  ip = WiFi.softAPIP().toString();
+
+  Serial.print("WiFi started in AP mode: ");
+  Serial.print(network_name);
+  Serial.print(" ip:");
+  Serial.println(ip);
+
+  
+}
+
+// Подключение к wifi
+void start_client_mode(){
+  IPAddress static_IP(192, 168, 1, 240);    // Желаемый IP адрес
+  IPAddress gateway(192, 168, 1, 1);         // Адрес шлюза (ваш роутер)
+  IPAddress subnet(255, 255, 255, 0);        // Маска подсети
+  IPAddress dns(192, 168, 1, 1);             // DNS сервер (обычно как шлюз)
+
+
+  wifiMulti.addAP(CLIENT_SSID, CLIENT_PASS);
+
+  // WiFi.config(static_IP, gateway, subnet, dns); //IP, Gateway, Subnet, DNS
+  Serial.println("Starting client mode");
+  while(wifiMulti.run() != WL_CONNECTED){
+    delay(10);
+  }
+  Serial.println("Client mode started");
+  ip = WiFi.localIP().toString();
+}
+
+//internet access
+
+String fetch(const String& url,
+             uint8_t method,
+             const String& body,
+             const String& contentType)
+{
+    HTTPClient http;
+    std::unique_ptr<WiFiClient> plainClient;
+    std::unique_ptr<WiFiClientSecure> secureClient;
+
+    if (url.startsWith("https://"))
+    {
+        secureClient.reset(new WiFiClientSecure());
+        secureClient->setTimeout(20000);
+        secureClient->setInsecure(); // для продакшена лучше сертификаты
+        if (!http.begin(*secureClient, url))
+            return "";
+    } else {
+        plainClient.reset(new WiFiClient());
+        plainClient->setTimeout(20000);
+        if (!http.begin(*plainClient, url))
+            return "";
+    }
+    http.setConnectTimeout(20000);
+    http.setTimeout(20000);
+    http.setReuse(false);
+    if (!body.isEmpty()){
+        http.addHeader("Content-Type", contentType);
+    }
+
+    int code = -1;
+
+    switch (method)
+    {
+        case HTTP_METHOD_GET:
+            code = http.GET();
+            break;
+
+        case HTTP_METHOD_POST:
+            code = http.POST(body);
+            break;
+
+        case HTTP_METHOD_PUT:
+            code = http.sendRequest("PUT", body);
+            break;
+
+        case HTTP_METHOD_DELETE:
+            code = http.sendRequest("DELETE", body);
+            break;
+    }
+
+    String response;
+
+    if (code > 0)//httpCode
+    {
+        response = http.getString();
+    }
+
+    http.end();
+
+
+    Serial.print("fetched url: ");
+    Serial.print(url);
+    Serial.print(" http code: ");
+    Serial.print(code);
+    if (response.length() == 0) {
+      Serial.println(" response: <empty>");
+    } else {
+      Serial.print(" response: ");
+      Serial.println(response);
+    }
+
+
+    return response;
+}
+
+
 bool loadLocationAndTimezoneFromIpInfo() {
   String geoResponse = fetch("http://ipinfo.io/json");
   if (geoResponse.length() == 0) {
@@ -661,263 +900,28 @@ bool syncWeatherFromInternet() {
   return true;
 }
 
-//settings
-bool saveSettings() {
-    StaticJsonDocument<256> doc;
-    doc["wifi"] = settings.wifi;
-    doc["pass"] = settings.pass;
-    doc["brightness"] = settings.brightness;
-    doc["min_brightness"] = settings.min_brightness;
-    doc["max_brightness"] = settings.max_brightness;
-    doc["sleep_delay"] = settings.sleep_delay;
-    doc["animation_id"] = settings.animation_id;
-    doc["mode"] = settings.mode;
-
-    File file = LittleFS.open("/config.json", "w");
-    if (!file) {
-        Serial.println("Failed to open file for writing");
-        return false;
-    }
-    serializeJsonPretty(doc, file);
-    file.close();
-    Serial.println("Settings saved");
-    return true;
-}
-
-bool loadSettings() {
-    if (!LittleFS.exists("/config.json")) {
-        Serial.println("Config file not found");
-        return false;
-    }
-    File file = LittleFS.open("/config.json", "r");
-    if (!file) {
-        Serial.println("Failed to open config file");
-        return false;
-    }
-    StaticJsonDocument<256> doc;
-    DeserializationError err =
-        deserializeJson(doc, file);
-    file.close();
-    if (err) {
-        Serial.print("JSON parse error: ");
-        Serial.println(err.c_str());
-        return false;
-    }
-
-    strlcpy(settings.wifi, doc["wifi"] | settings.wifi, sizeof(settings.wifi));
-    strlcpy(settings.pass, doc["pass"] | settings.pass, sizeof(settings.pass));
-    settings.brightness = doc["brightness"] | settings.brightness;
-    settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
-    settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
-    settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
-    settings.animation_id = doc["animation_id"] | settings.animation_id;
-    settings.mode = doc["mode"] | settings.mode;
-    settings.mode = constrain(settings.mode, 0, (int)MODE_COUNT - 1);
-    current_mode = (uint8_t)settings.mode;
-    loadAnimation(settings.animation_id);
-    loadImage();
-
-    Serial.println("Settings loaded");
-    return true;
-}
-
-void loadAnimation(int8_t animation_id){
-  if (animation_id>=0){
-    setGeneratedAnimation(animation_id);
-  }else{
-    if (animation_frames!=nullptr){
-      free(animation_frames);
-      animation_frames = nullptr;
-    }
-    uint32_t num=0;
-    uint8_t* frames=nullptr;
-    readBytes("/anim", frames, num);
-    if (frames != nullptr) {
-      setFramedAnimation(frames, num / NUM_LEDS);
+void syncTimeFromInternet() {
+  String ipInfo = fetch("http://ipinfo.io/json");
+  if (ipInfo.length()>0){
+    JsonDocument docIpInfo;
+    deserializeJson(docIpInfo, ipInfo);
+    String timezone = docIpInfo["timezone"];
+    String response = fetch(String("https://nordapi.ee/api/v1/time/current?timezone=")+timezone);
+    if (response.length() > 0) {
+      JsonDocument doc;
+      deserializeJson(doc, response);
+      settings.hour = (uint8_t) doc["data"]["hour"];
+      settings.minute = (uint8_t) doc["data"]["minute"];
+      settings.second = (uint8_t) doc["data"]["seconds"];
+      syncClock.setTime(settings.hour, settings.minute, settings.second);
+      Serial.print("Time synced ");
+      Serial.print(settings.hour);
+      Serial.print(":");
+      Serial.print(settings.minute);
+      Serial.print(":");
+      Serial.println(settings.second);
     }
   }
-}
-
-void loadImage(){
-    if (image_frame!=nullptr){
-      free(image_frame);
-      image_frame = nullptr;
-    }
-    uint8_t* frame=nullptr;
-    uint32_t num=0;
-    readBytes("/image", frame, num);
-    if (frame != nullptr && num == NUM_LEDS * 3) {
-      setImage(frame);
-    } else {
-      if (frame != nullptr) {
-        free(frame);
-      }
-      image_frame = nullptr;
-    }
-}
-
-// acess point / wifi
-
-// Выцепить последние два байта из MAC адреса ESP
-String mac_adress_id() {
-  const int mac_len = 6;
-  uint8_t mac[6];
-
-  WiFi.softAPmacAddress(mac);
-
-  String mac_id = String(mac[mac_len - 2], HEX) +
-          String(mac[mac_len - 1], HEX);
-
-  return mac_id;
-}
-
-// Запуск точки доступа (access point)
-void start_ap_mode() {
-  IPAddress ap_IP(192, 168, 1, 1);
-  IPAddress subnet(255, 255, 255, 0);
-
-  String network_name = AP_NAME + mac_adress_id();
-  // String network_name = AP_NAME;
-
-  WiFi.disconnect();
-  WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(ap_IP, ap_IP, subnet); // IP, Gateway, Subnet
-  WiFi.softAP(network_name.c_str(), AP_PASSWORD.c_str());
-
-  ip = WiFi.softAPIP().toString();
-
-  Serial.print("WiFi started in AP mode: ");
-  Serial.print(network_name);
-  Serial.print("\n");
-
-  
-}
-
-// Подключение к wifi
-void start_client_mode(){
-  IPAddress static_IP(192, 168, 1, 240);    // Желаемый IP адрес
-  IPAddress gateway(192, 168, 1, 1);         // Адрес шлюза (ваш роутер)
-  IPAddress subnet(255, 255, 255, 0);        // Маска подсети
-  IPAddress dns(192, 168, 1, 1);             // DNS сервер (обычно как шлюз)
-
-
-  wifiMulti.addAP(CLIENT_SSID, CLIENT_PASS);
-
-  // WiFi.config(static_IP, gateway, subnet, dns); //IP, Gateway, Subnet, DNS
-  Serial.println("Starting client mode");
-  while(wifiMulti.run() != WL_CONNECTED){
-    delay(10);
-  }
-  Serial.println("Client mode started");
-  ip = WiFi.localIP().toString();
-}
-
-//internet access
-
-String fetch(const String& url,
-             uint8_t method,
-             const String& body,
-             const String& contentType)
-{
-    HTTPClient http;
-    std::unique_ptr<WiFiClient> plainClient;
-    std::unique_ptr<WiFiClientSecure> secureClient;
-
-    if (url.startsWith("https://"))
-    {
-        secureClient.reset(new WiFiClientSecure());
-        secureClient->setTimeout(5000);
-        secureClient->setInsecure(); // для продакшена лучше сертификаты
-        if (!http.begin(*secureClient, url))
-            return "";
-    } else {
-        plainClient.reset(new WiFiClient());
-        plainClient->setTimeout(5000);
-        if (!http.begin(*plainClient, url))
-            return "";
-    }
-    http.setConnectTimeout(5000);
-    http.setTimeout(6000);
-    http.setReuse(false);
-    if (!body.isEmpty()){
-        http.addHeader("Content-Type", contentType);
-    }
-
-    int code = -1;
-
-    switch (method)
-    {
-        case HTTP_METHOD_GET:
-            code = http.GET();
-            break;
-
-        case HTTP_METHOD_POST:
-            code = http.POST(body);
-            break;
-
-        case HTTP_METHOD_PUT:
-            code = http.sendRequest("PUT", body);
-            break;
-
-        case HTTP_METHOD_DELETE:
-            code = http.sendRequest("DELETE", body);
-            break;
-    }
-
-    String response;
-
-    if (code > 0)//httpCode
-    {
-        response = http.getString();
-    }
-
-    http.end();
-
-
-    Serial.print("fetched url: ");
-    Serial.print(url);
-    Serial.print(" http code: ");
-    Serial.print(code);
-    if (response.length() == 0) {
-      Serial.println(" response: <empty>");
-    } else {
-      Serial.print(" response: ");
-      Serial.println(response);
-    }
-
-
-    return response;
-}
-
-
-bool syncTimeFromInternet() {
-  if (WiFi.status() != WL_CONNECTED) {
-    return false;
-  }
-  if (cached_timezone.length() == 0 && !loadLocationAndTimezoneFromIpInfo()) {
-    return false;
-  }
-
-  configTzTime(cached_timezone.c_str(), "pool.ntp.org", "ru.pool.ntp.org", "time.google.com");
-
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo, 2000)) {
-    Serial.println("NTP sync failed");
-    return false;
-  }
-
-  hour = (uint8_t)timeinfo.tm_hour;
-  minute = (uint8_t)timeinfo.tm_min;
-  second = (uint8_t)timeinfo.tm_sec;
-  syncClock.setTime(hour, minute, second);
-
-  Serial.print("Time synced ");
-  Serial.print(hour);
-  Serial.print(":");
-  Serial.print(minute);
-  Serial.print(":");
-  Serial.println(second);
-  return true;
 }
 
 //little file system
@@ -1038,10 +1042,15 @@ bool readStruct(const char* filename, T& data)
 
 //endpoints
 
+void endpoint_root() {
+  String out = "<h1>Hello there!</h1>";
+  server.send(200, "text/html", out);
+}
+
 void endpoint_status() {
   const char* mode = modeToString(current_mode);
 
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<400> doc;
   doc["mode"] = mode;
   doc["brightness"] = settings.brightness;
   doc["min_brightness"] = settings.min_brightness;
@@ -1205,8 +1214,9 @@ void endpoint_not_found() {
 void processTime(){
   if (WiFi.status() == WL_CONNECTED && timeSyncTimer.check()) {
     syncTimeFromInternet();
+    saveSettings();
   }
-  if(timeUpdateTimer.check())syncClock.getTime(hour, minute, second);
+  if(timeUpdateTimer.check())syncClock.getTime(settings.hour, settings.minute, settings.second);
 }
 
 void processWeather(){
@@ -1232,6 +1242,7 @@ void processButtons(){
 
 void setup_endpoints(){
   Serial.println("setup_endpoints");
+  server.on("/", HTTP_GET, endpoint_root);
   server.on("/status", HTTP_GET, endpoint_status);
   server.on("/settings", HTTP_POST, endpoint_set_settings);
   server.on("/wifi", HTTP_POST, endpoint_set_wifi);
@@ -1331,8 +1342,8 @@ void loop() {
   // Serial.println(modeToString(1));
 
   processButtons();
-  processTime();
   processWeather();
+  processTime();
   processMatrix();
-  delay(100);
+  // delay(100);
 }

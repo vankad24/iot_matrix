@@ -299,6 +299,7 @@ bool weather_valid = false;
 float weather_lat = 0.0f;
 float weather_lon = 0.0f;
 bool weather_location_ready = false;
+String cached_timezone = "";
 
 
 Timer animationTimer;
@@ -570,32 +571,51 @@ void setImage(uint8_t* frame){
   image_frame = frame;
 }
 
-bool detectWeatherLocation() {
-  String geoResponse = fetch("https://ipwho.is/");
+bool loadLocationAndTimezoneFromIpInfo() {
+  String geoResponse = fetch("http://ipinfo.io/json");
   if (geoResponse.length() == 0) {
     return false;
   }
 
-  StaticJsonDocument<512> geoDoc;
+  DynamicJsonDocument geoDoc(2048);
   DeserializationError geoErr = deserializeJson(geoDoc, geoResponse);
   if (geoErr) {
-    Serial.print("Weather geo JSON parse error: ");
+    Serial.print("IpInfo JSON parse error: ");
     Serial.println(geoErr.c_str());
     return false;
   }
 
-  bool success = geoDoc["success"] | false;
-  if (!success) {
+  const char* loc = geoDoc["loc"] | "";
+  const char* tz = geoDoc["timezone"] | "";
+  if (strlen(loc) == 0 || strlen(tz) == 0) {
+    Serial.println("IpInfo has no loc/timezone");
     return false;
   }
 
-  weather_lat = geoDoc["latitude"] | 0.0f;
-  weather_lon = geoDoc["longitude"] | 0.0f;
+  String locString = String(loc);
+  int comma = locString.indexOf(',');
+  if (comma <= 0 || comma >= locString.length() - 1) {
+    Serial.println("IpInfo loc parse failed");
+    return false;
+  }
+
+  float lat = locString.substring(0, comma).toFloat();
+  float lon = locString.substring(comma + 1).toFloat();
+  if ((lat == 0.0f && lon == 0.0f) || isnan(lat) || isnan(lon)) {
+    Serial.println("IpInfo invalid lat/lon");
+    return false;
+  }
+
+  weather_lat = lat;
+  weather_lon = lon;
+  cached_timezone = String(tz);
   weather_location_ready = true;
-  Serial.print("Weather location ready: ");
+  Serial.print("IpInfo location ready: ");
   Serial.print(weather_lat, 4);
   Serial.print(", ");
-  Serial.println(weather_lon, 4);
+  Serial.print(weather_lon, 4);
+  Serial.print(" tz=");
+  Serial.println(cached_timezone);
   return true;
 }
 
@@ -604,7 +624,7 @@ bool syncWeatherFromInternet() {
     weather_valid = false;
     return false;
   }
-  if (!weather_location_ready && !detectWeatherLocation()) {
+  if (!weather_location_ready && !loadLocationAndTimezoneFromIpInfo()) {
     weather_valid = false;
     return false;
   }
@@ -806,14 +826,19 @@ String fetch(const String& url,
     if (url.startsWith("https://"))
     {
         secureClient.reset(new WiFiClientSecure());
+        secureClient->setTimeout(5000);
         secureClient->setInsecure(); // для продакшена лучше сертификаты
         if (!http.begin(*secureClient, url))
             return "";
     } else {
         plainClient.reset(new WiFiClient());
+        plainClient->setTimeout(5000);
         if (!http.begin(*plainClient, url))
             return "";
     }
+    http.setConnectTimeout(5000);
+    http.setTimeout(6000);
+    http.setReuse(false);
     if (!body.isEmpty()){
         http.addHeader("Content-Type", contentType);
     }
@@ -853,36 +878,46 @@ String fetch(const String& url,
     Serial.print(url);
     Serial.print(" http code: ");
     Serial.print(code);
-    Serial.print(" response: ");
-    Serial.println(response);
+    if (response.length() == 0) {
+      Serial.println(" response: <empty>");
+    } else {
+      Serial.print(" response: ");
+      Serial.println(response);
+    }
 
 
     return response;
 }
 
 
-void syncTimeFromInternet() {
-  String ipInfo = fetch("http://ipinfo.io/json");
-  if (ipInfo.length()>0){
-    JsonDocument docIpInfo;
-    deserializeJson(docIpInfo, ipInfo);
-    String timezone = docIpInfo["timezone"];
-    String response = fetch(String("https://nordapi.ee/api/v1/time/current?timezone=")+timezone);
-    if (response.length() > 0) {
-      JsonDocument doc;
-      deserializeJson(doc, response);
-      hour = doc["data"]["hour"];
-      minute = doc["data"]["minute"];
-      second = doc["data"]["seconds"];
-      syncClock.setTime(hour, minute, second);
-      Serial.print("Time synced ");
-      Serial.print(hour);
-      Serial.print(":");
-      Serial.print(minute);
-      Serial.print(":");
-      Serial.println(second);
-    }
+bool syncTimeFromInternet() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
   }
+  if (cached_timezone.length() == 0 && !loadLocationAndTimezoneFromIpInfo()) {
+    return false;
+  }
+
+  configTzTime(cached_timezone.c_str(), "pool.ntp.org", "ru.pool.ntp.org", "time.google.com");
+
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 2000)) {
+    Serial.println("NTP sync failed");
+    return false;
+  }
+
+  hour = (uint8_t)timeinfo.tm_hour;
+  minute = (uint8_t)timeinfo.tm_min;
+  second = (uint8_t)timeinfo.tm_sec;
+  syncClock.setTime(hour, minute, second);
+
+  Serial.print("Time synced ");
+  Serial.print(hour);
+  Serial.print(":");
+  Serial.print(minute);
+  Serial.print(":");
+  Serial.println(second);
+  return true;
 }
 
 //little file system
@@ -1269,10 +1304,8 @@ void setup_wifi(){
     Serial.print("Client mode started, IP: ");
     Serial.println(ip);
 
-    timeSyncTimer.start(10UL * 60UL * 1000UL);
-    weatherSyncTimer.start(15UL * 60UL * 1000UL);
-    syncTimeFromInternet();
-    syncWeatherFromInternet();
+    timeSyncTimer.start(10UL * 60UL * 1000UL, millis() + 5000UL);
+    weatherSyncTimer.start(15UL * 60UL * 1000UL, millis() + 7000UL);
   } else {
     Serial.println("WiFi connect failed, fallback to AP");
     start_ap_mode();

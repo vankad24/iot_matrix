@@ -83,9 +83,7 @@ struct Settings {
   char wifi[32] = "NoHornyWifi";
   char pass[32] = "24242424";
   int brightness = 30;
-  int min_brightness = 10;
-  int max_brightness = 100;
-  int sleep_delay = 10;
+  int animation_delay = 100;
   int animation_id = 0;
   int mode = 0;
   uint8_t hour=0;
@@ -508,7 +506,7 @@ void drawImage(int x, int y, int width, int height, uint8_t* image){
   for (uint16_t i=0; i<height; i++){
     for (uint16_t j=0; j<width; j++){
       uint32_t index = (i*width+j)*3;
-      leds[XY(x+j, y+i)] = CHSV(image[index], image[index+1], image[index+2]);
+      leds[XY(x+j, y+i)] = CRGB(image[index], image[index+1], image[index+2]);
     }
   }
 }
@@ -589,9 +587,7 @@ bool saveSettings() {
     doc["wifi"] = settings.wifi;
     doc["pass"] = settings.pass;
     doc["brightness"] = settings.brightness;
-    doc["min_brightness"] = settings.min_brightness;
-    doc["max_brightness"] = settings.max_brightness;
-    doc["sleep_delay"] = settings.sleep_delay;
+    doc["animation_delay"] = settings.animation_delay;
     doc["animation_id"] = settings.animation_id;
     doc["mode"] = settings.mode;
     doc["hour"] = settings.hour;
@@ -631,9 +627,10 @@ bool loadSettings() {
     strlcpy(settings.wifi, doc["wifi"] | settings.wifi, sizeof(settings.wifi));
     strlcpy(settings.pass, doc["pass"] | settings.pass, sizeof(settings.pass));
     settings.brightness = doc["brightness"] | settings.brightness;
-    settings.min_brightness = doc["min_brightness"] | settings.min_brightness;
-    settings.max_brightness = doc["max_brightness"] | settings.max_brightness;
-    settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
+    settings.animation_delay = doc["animation_delay"] | settings.animation_delay;
+    settings.brightness = constrain(settings.brightness, 1, 255);
+    settings.animation_delay = constrain(settings.animation_delay, 20, 5000);
+    animation_delay_ms = (uint16_t)settings.animation_delay;
     settings.animation_id = doc["animation_id"] | settings.animation_id;
     settings.mode = doc["mode"] | settings.mode;
     settings.mode = constrain(settings.mode, 0, (int)MODE_COUNT - 1);
@@ -668,7 +665,10 @@ void loadAnimation(int8_t animation_id){
     uint8_t* frames=nullptr;
     readBytes("/anim", frames, num);
     if (frames != nullptr) {
-      setFramedAnimation(frames, num / NUM_LEDS);
+      if (num % (NUM_LEDS * 3) == 0) {
+        setFramedAnimation(frames, num / (NUM_LEDS * 3));
+      }
+      free(frames);
     }
   }
 }
@@ -683,6 +683,7 @@ void loadImage(){
     readBytes("/image", frame, num);
     if (frame != nullptr && num == NUM_LEDS * 3) {
       setImage(frame);
+      free(frame);
     } else {
       if (frame != nullptr) {
         free(frame);
@@ -1096,9 +1097,7 @@ void endpoint_status() {
   doc["mode"] = mode_name;
   doc["mode_id"] = current_mode;
   doc["brightness"] = settings.brightness;
-  doc["min_brightness"] = settings.min_brightness;
-  doc["max_brightness"] = settings.max_brightness;
-  doc["sleep_delay"] = settings.sleep_delay;
+  doc["animation_delay"] = settings.animation_delay;
   doc["animation_id"] = settings.animation_id;
   doc["hour"] = settings.hour;       
   doc["minute"] = settings.minute;   
@@ -1145,22 +1144,13 @@ void endpoint_set_settings() {
   StaticJsonDocument<128> doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { server.send(400, "application/json", "{}\n"); return; }
-  int minBr = doc["min_brightness"] | settings.min_brightness;
-  int maxBr = doc["max_brightness"] | settings.max_brightness;
-  minBr = constrain(minBr, 1, 255);
-  maxBr = constrain(maxBr, 1, 255);
-  if (minBr > maxBr) {
-    int t = minBr;
-    minBr = maxBr;
-    maxBr = t;
-  }
-  settings.min_brightness = minBr;
-  settings.max_brightness = maxBr;
-  settings.sleep_delay = doc["sleep_delay"] | settings.sleep_delay;
-  settings.sleep_delay = constrain(settings.sleep_delay, 1, 3600);
-  settings.brightness = constrain(settings.brightness, settings.min_brightness, settings.max_brightness);
   if (doc.containsKey("brightness")) {
-    settings.brightness = constrain((int)(doc["brightness"] | settings.brightness), settings.min_brightness, settings.max_brightness);
+    settings.brightness = constrain((int)(doc["brightness"] | settings.brightness), 1, 255);
+  }
+  if (doc.containsKey("animation_delay")) {
+    settings.animation_delay = constrain((int)(doc["animation_delay"] | settings.animation_delay), 20, 5000);
+    animation_delay_ms = (uint16_t)settings.animation_delay;
+    animationTimer.start(animation_delay_ms, millis() + animation_delay_ms);
   }
   FastLED.setBrightness(settings.brightness);
   saveSettings();
@@ -1210,6 +1200,7 @@ void endpoint_set_image() {
     return;
   }
   setImage(frame);
+  free(frame);
   setMode(Mode::Image);
   saveSettings();
   endpoint_status();
@@ -1223,9 +1214,9 @@ void endpoint_set_animation() {
   JsonArray arr = doc["data"].as<JsonArray>();
   if (frames <= 0 || arr.size() != frames) { server.send(400, "application/json", "{}\n"); return; }
 
-  uint32_t total = (uint32_t)frames * NUM_LEDS;
-  uint8_t* buffer = (uint8_t*)malloc(total);
-  if (buffer == nullptr) {
+  uint32_t totalRgb = (uint32_t)frames * NUM_LEDS * 3;
+  uint8_t* bufferRgb = (uint8_t*)malloc(totalRgb);
+  if (bufferRgb == nullptr) {
     server.send(500, "application/json", "{}\n");
     return;
   }
@@ -1233,7 +1224,7 @@ void endpoint_set_animation() {
   for (int f = 0; f < frames; f++) {
     JsonArray frame = arr[f].as<JsonArray>();
     if (frame.size() != NUM_LEDS) {
-      free(buffer);
+      free(bufferRgb);
       server.send(400, "application/json", "{\"error\":\"frame must have 256 bytes\"}\n");
       return;
     }
@@ -1241,16 +1232,21 @@ void endpoint_set_animation() {
       int value = frame[i] | 0;
       if (value < 0) value = 0;
       if (value > 255) value = 255;
-      buffer[f * NUM_LEDS + i] = (uint8_t)value;
+      uint8_t px = (uint8_t)value;
+      uint32_t rgbOffset = ((uint32_t)f * NUM_LEDS + (uint32_t)i) * 3;
+      bufferRgb[rgbOffset + 0] = px;
+      bufferRgb[rgbOffset + 1] = px;
+      bufferRgb[rgbOffset + 2] = px;
     }
   }
 
-  if (!saveBytes("/anim", buffer, total)) {
-    free(buffer);
+  if (!saveBytes("/anim", bufferRgb, totalRgb)) {
+    free(bufferRgb);
     server.send(500, "application/json", "{\"error\":\"failed to save animation\"}\n");
     return;
   }
-  setFramedAnimation(buffer, frames);
+  setFramedAnimation(bufferRgb, frames);
+  free(bufferRgb);
   setMode(Mode::Animation);
   saveSettings();
   endpoint_status();
